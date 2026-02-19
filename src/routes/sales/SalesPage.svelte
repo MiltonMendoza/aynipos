@@ -114,7 +114,12 @@
             <div class="flex justify-between text-sm">
               <div>
                 <div style="font-weight: 600;">{item.product_name}</div>
-                <div class="text-xs text-muted">{item.quantity} × {formatCurrency(item.unit_price)}</div>
+                <div class="text-xs text-muted">
+                  {item.quantity} × {formatCurrency(item.unit_price)}
+                  {#if item.discount > 0}
+                    <span style="color: var(--accent-warning); margin-left: var(--space-sm);">· Desc. −{formatCurrency(item.discount)}</span>
+                  {/if}
+                </div>
               </div>
               <div style="font-weight: 600;">{formatCurrency(item.total)}</div>
             </div>
@@ -126,6 +131,12 @@
             <span class="text-muted">Subtotal</span>
             <span>{formatCurrency(selectedSale.subtotal)}</span>
           </div>
+          {#if selectedSale.discount_amount > 0}
+            <div class="flex justify-between text-sm" style="margin-bottom: var(--space-xs);">
+              <span class="text-muted">Descuento</span>
+              <span style="color: var(--accent-warning);">−{formatCurrency(selectedSale.discount_amount)}</span>
+            </div>
+          {/if}
           <div class="flex justify-between text-sm" style="margin-bottom: var(--space-xs);">
             <span class="text-muted">IVA</span>
             <span>{formatCurrency(selectedSale.tax_amount)}</span>

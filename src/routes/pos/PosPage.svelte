@@ -15,6 +15,14 @@
   let searchInputRef: HTMLInputElement | undefined = $state(undefined);
   let f4PendingConfirm = $state(false);
 
+  // Discounts
+  let editingItemDiscount: number | null = $state(null);
+  let itemDiscountType: 'percent' | 'fixed' = $state('percent');
+  let itemDiscountInput: number = $state(0);
+  let globalDiscountType: 'percent' | 'fixed' = $state('fixed');
+  let globalDiscountInput: number = $state(0);
+  let showGlobalDiscount = $state(false);
+
   // Dashboard quick stats
   let stats = $state({ total_sales_today: 0, total_transactions_today: 0, total_products: 0, low_stock_count: 0, expiring_soon_count: 0 });
 
@@ -130,6 +138,48 @@
     }
   }
 
+  function toggleItemDiscount(index: number) {
+    if (editingItemDiscount === index) {
+      editingItemDiscount = null;
+    } else {
+      editingItemDiscount = index;
+      const item = cart[index];
+      // Pre-fill with existing discount
+      if (item.discount > 0) {
+        itemDiscountType = 'fixed';
+        itemDiscountInput = item.discount;
+      } else {
+        itemDiscountType = 'percent';
+        itemDiscountInput = 0;
+      }
+    }
+  }
+
+  function applyItemDiscount(index: number) {
+    const item = cart[index];
+    const lineTotal = item.product.product.sale_price * item.quantity;
+    let discountAmount = 0;
+
+    if (itemDiscountType === 'percent') {
+      const pct = Math.min(Math.max(itemDiscountInput, 0), 100);
+      discountAmount = lineTotal * (pct / 100);
+    } else {
+      discountAmount = Math.min(Math.max(itemDiscountInput, 0), lineTotal);
+    }
+
+    cart[index].discount = Math.round(discountAmount * 100) / 100;
+    cart[index].subtotal = lineTotal - cart[index].discount;
+    cart = [...cart];
+  }
+
+  function removeItemDiscount(index: number) {
+    const item = cart[index];
+    cart[index].discount = 0;
+    cart[index].subtotal = item.product.product.sale_price * item.quantity;
+    itemDiscountInput = 0;
+    cart = [...cart];
+  }
+
   function removeFromCart(index: number) {
     cart = cart.filter((_, i) => i !== index);
   }
@@ -167,8 +217,22 @@
     return cart.reduce((sum, item) => sum + (item.subtotal * item.product.product.tax_rate), 0);
   }
 
+  function computedGlobalDiscount(): number {
+    if (globalDiscountInput <= 0) return 0;
+    const sub = cartSubtotal();
+    if (globalDiscountType === 'percent') {
+      const pct = Math.min(globalDiscountInput, 100);
+      return Math.round(sub * (pct / 100) * 100) / 100;
+    }
+    return Math.min(Math.round(globalDiscountInput * 100) / 100, sub);
+  }
+
   function cartTotal(): number {
-    return cartSubtotal();
+    return cartSubtotal() - computedGlobalDiscount();
+  }
+
+  function totalItemDiscounts(): number {
+    return cart.reduce((sum, item) => sum + item.discount, 0);
   }
 
   function change(): number {
@@ -200,6 +264,7 @@
 
   async function completeSale() {
     if (!validatePayment()) return;
+    const gd = computedGlobalDiscount();
     try {
       await createSale({
         items: cart.map(c => ({
@@ -208,9 +273,10 @@
           discount: c.discount > 0 ? c.discount : undefined,
         })),
         payment_method: paymentMethod,
+        discount_amount: gd > 0 ? gd : undefined,
       });
       showToast('✅ Venta completada exitosamente', 'success');
-      cart = [];
+      clearCart();
       showPaymentModal = false;
       stats = await getDashboardStats();
       await loadProducts(searchQuery);
@@ -221,6 +287,10 @@
 
   function clearCart() {
     cart = [];
+    globalDiscountInput = 0;
+    globalDiscountType = 'fixed';
+    showGlobalDiscount = false;
+    editingItemDiscount = null;
   }
 
   function showToast(message: string, type: 'success' | 'error' | 'warning') {
@@ -367,14 +437,69 @@
                 <span style="font-weight: 600; font-size: var(--font-size-sm);" class="truncate">
                   {item.product.product.name}
                 </span>
-                <button
-                  class="btn btn-ghost btn-sm"
-                  style="width: 24px; height: 24px; padding: 0; font-size: var(--font-size-xs); border-radius: var(--radius-full);"
-                  onclick={() => removeFromCart(index)}
-                >
-                  ✕
-                </button>
+                <div class="flex items-center gap-xs">
+                  <button
+                    class="btn btn-ghost btn-sm"
+                    style="padding: 2px 6px; font-size: var(--font-size-xs); {item.discount > 0 ? 'color: var(--accent-warning);' : ''}"
+                    onclick={() => toggleItemDiscount(index)}
+                    title="Descuento por ítem"
+                  >
+                    {item.discount > 0 ? `−${formatCurrency(item.discount)}` : '% Desc.'}
+                  </button>
+                  <button
+                    class="btn btn-ghost btn-sm"
+                    style="width: 24px; height: 24px; padding: 0; font-size: var(--font-size-xs); border-radius: var(--radius-full);"
+                    onclick={() => removeFromCart(index)}
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
+
+              {#if editingItemDiscount === index}
+                <div style="
+                  background: var(--bg-elevated);
+                  border-radius: var(--radius-sm);
+                  padding: var(--space-sm) var(--space-md);
+                  display: flex;
+                  align-items: center;
+                  gap: var(--space-sm);
+                  animation: slideDown var(--transition-fast);
+                ">
+                  <div style="display: flex; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border-color);">
+                    <button
+                      class="btn btn-sm"
+                      style="padding: 2px 8px; border-radius: 0; font-size: var(--font-size-xs); {itemDiscountType === 'percent' ? 'background: var(--accent-primary); color: white;' : 'background: transparent; color: var(--text-secondary);'}"
+                      onclick={() => { itemDiscountType = 'percent'; itemDiscountInput = 0; removeItemDiscount(index); }}
+                    >%</button>
+                    <button
+                      class="btn btn-sm"
+                      style="padding: 2px 8px; border-radius: 0; font-size: var(--font-size-xs); {itemDiscountType === 'fixed' ? 'background: var(--accent-primary); color: white;' : 'background: transparent; color: var(--text-secondary);'}"
+                      onclick={() => { itemDiscountType = 'fixed'; itemDiscountInput = 0; removeItemDiscount(index); }}
+                    >Bs</button>
+                  </div>
+                  <input
+                    type="number"
+                    class="input"
+                    style="width: 70px; padding: 2px var(--space-sm); text-align: center; font-size: var(--font-size-sm);"
+                    bind:value={itemDiscountInput}
+                    oninput={() => applyItemDiscount(index)}
+                    min="0"
+                    max={itemDiscountType === 'percent' ? 100 : undefined}
+                    step={itemDiscountType === 'percent' ? 1 : 0.5}
+                    placeholder={itemDiscountType === 'percent' ? '0%' : '0.00'}
+                  />
+                  {#if item.discount > 0}
+                    <button
+                      class="btn btn-ghost btn-sm"
+                      style="padding: 2px 6px; font-size: var(--font-size-xs); color: var(--accent-danger);"
+                      onclick={() => removeItemDiscount(index)}
+                      title="Quitar descuento"
+                    >✕</button>
+                  {/if}
+                </div>
+              {/if}
+
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-sm">
                   <button
@@ -402,6 +527,9 @@
               </div>
               <div class="text-xs text-muted">
                 {formatCurrency(item.product.product.sale_price)} × {item.quantity}
+                {#if item.discount > 0}
+                  <span style="color: var(--accent-warning); margin-left: var(--space-sm);">· Desc. −{formatCurrency(item.discount)}</span>
+                {/if}
                 {#if item.quantity >= item.product.current_stock}
                   <span style="color: var(--accent-warning); margin-left: var(--space-sm);">· Stock máximo</span>
                 {/if}
@@ -419,10 +547,74 @@
           <span class="text-muted">Subtotal</span>
           <span>{formatCurrency(cartSubtotal())}</span>
         </div>
+        {#if totalItemDiscounts() > 0}
+          <div class="flex justify-between text-sm">
+            <span class="text-muted">Desc. por ítems</span>
+            <span style="color: var(--accent-warning);">−{formatCurrency(totalItemDiscounts())}</span>
+          </div>
+        {/if}
         <div class="flex justify-between text-sm">
           <span class="text-muted">IVA (13%)</span>
           <span>{formatCurrency(cartTax())}</span>
         </div>
+
+        <!-- Global Discount -->
+        {#if !showGlobalDiscount}
+          <button
+            class="btn btn-ghost btn-sm"
+            style="font-size: var(--font-size-xs); align-self: flex-start; padding: 2px var(--space-sm); color: var(--accent-warning);"
+            onclick={() => showGlobalDiscount = true}
+          >
+            + Agregar descuento global
+          </button>
+        {:else}
+          <div style="
+            background: var(--bg-elevated);
+            border-radius: var(--radius-sm);
+            padding: var(--space-sm) var(--space-md);
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            animation: slideDown var(--transition-fast);
+          ">
+            <span class="text-xs text-muted" style="white-space: nowrap;">Desc. global</span>
+            <div style="display: flex; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border-color);">
+              <button
+                class="btn btn-sm"
+                style="padding: 2px 8px; border-radius: 0; font-size: var(--font-size-xs); {globalDiscountType === 'percent' ? 'background: var(--accent-primary); color: white;' : 'background: transparent; color: var(--text-secondary);'}"
+                onclick={() => { globalDiscountType = 'percent'; globalDiscountInput = 0; }}
+              >%</button>
+              <button
+                class="btn btn-sm"
+                style="padding: 2px 8px; border-radius: 0; font-size: var(--font-size-xs); {globalDiscountType === 'fixed' ? 'background: var(--accent-primary); color: white;' : 'background: transparent; color: var(--text-secondary);'}"
+                onclick={() => { globalDiscountType = 'fixed'; globalDiscountInput = 0; }}
+              >Bs</button>
+            </div>
+            <input
+              type="number"
+              class="input"
+              style="width: 70px; padding: 2px var(--space-sm); text-align: center; font-size: var(--font-size-sm);"
+              bind:value={globalDiscountInput}
+              min="0"
+              max={globalDiscountType === 'percent' ? 100 : undefined}
+              step={globalDiscountType === 'percent' ? 1 : 0.5}
+              placeholder={globalDiscountType === 'percent' ? '0%' : '0.00'}
+            />
+            <button
+              class="btn btn-ghost btn-sm"
+              style="padding: 2px 6px; font-size: var(--font-size-xs); color: var(--accent-danger);"
+              onclick={() => { showGlobalDiscount = false; globalDiscountInput = 0; }}
+              title="Quitar descuento global"
+            >✕</button>
+          </div>
+          {#if computedGlobalDiscount() > 0}
+            <div class="flex justify-between text-sm">
+              <span class="text-muted">Descuento global</span>
+              <span style="color: var(--accent-warning);">−{formatCurrency(computedGlobalDiscount())}</span>
+            </div>
+          {/if}
+        {/if}
+
         <div style="height: 1px; background: var(--border-color); margin: var(--space-xs) 0;"></div>
         <div class="flex justify-between" style="font-size: var(--font-size-xl); font-weight: 800;">
           <span>Total</span>
