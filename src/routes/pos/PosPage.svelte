@@ -12,6 +12,8 @@
   let cashReceived = $state(0);
   let toast = $state({ show: false, message: '', type: 'success' as 'success' | 'error' | 'warning' });
   let paymentErrors: Record<string, string> = $state({});
+  let searchInputRef: HTMLInputElement | undefined = $state(undefined);
+  let f4PendingConfirm = $state(false);
 
   // Dashboard quick stats
   let stats = $state({ total_sales_today: 0, total_transactions_today: 0, total_products: 0, low_stock_count: 0, expiring_soon_count: 0 });
@@ -33,6 +35,69 @@
     try {
       products = await getProducts(search || undefined);
     } catch { products = []; }
+  }
+
+  // ─── Keyboard Shortcuts ───
+  function handleKeydown(e: KeyboardEvent) {
+    const tag = (e.target as HTMLElement)?.tagName;
+    const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+
+    // Escape — close any open modal
+    if (e.key === 'Escape') {
+      if (showPaymentModal) { showPaymentModal = false; e.preventDefault(); }
+      return;
+    }
+
+    // F1 — focus search
+    if (e.key === 'F1') {
+      e.preventDefault();
+      searchInputRef?.focus();
+      searchInputRef?.select();
+      return;
+    }
+
+    // F2 — open payment / cobrar
+    if (e.key === 'F2') {
+      e.preventDefault();
+      openPayment();
+      return;
+    }
+
+    // Enter — confirm sale when payment modal is open
+    if (e.key === 'Enter' && showPaymentModal) {
+      e.preventDefault();
+      completeSale();
+      return;
+    }
+
+    // F4 — clear cart (double-press to confirm)
+    if (e.key === 'F4') {
+      e.preventDefault();
+      if (cart.length > 0) {
+        if (f4PendingConfirm) {
+          clearCart();
+          f4PendingConfirm = false;
+          showToast('🗑️ Carrito limpiado', 'success');
+        } else {
+          f4PendingConfirm = true;
+          showToast('⚠️ Presiona F4 de nuevo para limpiar el carrito', 'warning');
+          setTimeout(() => { f4PendingConfirm = false; }, 3000);
+        }
+      }
+      return;
+    }
+
+    // +/- — adjust last item quantity (only when not in an input)
+    if (!isInput && cart.length > 0) {
+      const lastIdx = cart.length - 1;
+      if (e.key === '+' || e.key === '=') {
+        e.preventDefault();
+        updateQuantity(lastIdx, cart[lastIdx].quantity + 1);
+      } else if (e.key === '-') {
+        e.preventDefault();
+        updateQuantity(lastIdx, cart[lastIdx].quantity - 1);
+      }
+    }
   }
 
   function addToCart(ps: ProductWithStock) {
@@ -168,6 +233,8 @@
   }
 </script>
 
+<svelte:window onkeydown={handleKeydown} />
+
 <div style="display: flex; height: 100vh; overflow: hidden;">
   <!-- Left: Product Search -->
   <div style="flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border-color);">
@@ -176,8 +243,9 @@
       <div class="flex items-center gap-md">
         <div style="position: relative; flex: 1;">
           <input
+            bind:this={searchInputRef}
             class="input input-lg"
-            placeholder="🔍 Buscar producto por nombre, SKU o código de barras..."
+            placeholder="🔍 Buscar producto por nombre, SKU o código de barras... (F1)"
             bind:value={searchQuery}
           />
         </div>
@@ -270,7 +338,7 @@
           {/if}
         </h2>
         {#if cart.length > 0}
-          <button class="btn btn-ghost btn-sm" onclick={clearCart}>Limpiar</button>
+          <button class="btn btn-ghost btn-sm" onclick={clearCart}>Limpiar (F4)</button>
         {/if}
       </div>
     </div>
@@ -368,7 +436,7 @@
         disabled={cart.length === 0}
         style="position: relative; overflow: hidden;"
       >
-        💰 Cobrar {formatCurrency(cartTotal())}
+        💰 Cobrar {formatCurrency(cartTotal())} (F2)
       </button>
     </div>
   </div>
@@ -444,7 +512,7 @@
           class="btn btn-success btn-lg"
           onclick={completeSale}
         >
-          ✅ Confirmar Venta
+          ✅ Confirmar Venta (Enter)
         </button>
       </div>
     </div>
