@@ -523,6 +523,33 @@ button, label, nav, aside {
   box-shadow: 0 0 0 3px var(--accent-primary-glow);
 }
 
+/* ─── Input Error States ─── */
+.input-error {
+  border-color: var(--accent-danger) !important;
+}
+
+.input-error:focus {
+  box-shadow: 0 0 0 3px var(--accent-danger-glow) !important;
+}
+
+.field-error {
+  color: var(--accent-danger);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  margin-top: 2px;
+  animation: slideDown var(--transition-fast);
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+
+.shake {
+  animation: shake 0.4s ease;
+}
+
 /* ─── Table ─── */
 .table-container {
   overflow-x: auto;

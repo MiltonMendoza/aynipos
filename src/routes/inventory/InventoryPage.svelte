@@ -20,6 +20,11 @@
   });
   let newCategoryName = $state('');
 
+  // Validation errors
+  let productErrors: Record<string, string> = $state({});
+  let categoryErrors: Record<string, string> = $state({});
+  let adjustErrors: Record<string, string> = $state({});
+
   onMount(loadInventory);
 
   async function loadInventory() {
@@ -35,20 +40,58 @@
     } catch { inventory = []; }
   }
 
+  function validateProduct(): boolean {
+    const e: Record<string, string> = {};
+    if (!newProduct.sku.trim()) e.sku = 'El SKU es obligatorio';
+    if (!newProduct.name.trim()) e.name = 'El nombre es obligatorio';
+    if (newProduct.purchase_price <= 0) e.purchase_price = 'El precio de compra debe ser mayor a 0';
+    if (newProduct.sale_price <= 0) e.sale_price = 'El precio de venta debe ser mayor a 0';
+    if (newProduct.sale_price > 0 && newProduct.purchase_price > 0 && newProduct.sale_price < newProduct.purchase_price) {
+      e.sale_price = 'El precio de venta debe ser mayor o igual al de compra';
+    }
+    productErrors = e;
+    return Object.keys(e).length === 0;
+  }
+
+  function validateCategory(): boolean {
+    const e: Record<string, string> = {};
+    if (!newCategoryName.trim()) e.name = 'El nombre de la categoría es obligatorio';
+    categoryErrors = e;
+    return Object.keys(e).length === 0;
+  }
+
+  function validateAdjust(): boolean {
+    const e: Record<string, string> = {};
+    if (adjustQty === 0) e.qty = 'La cantidad no puede ser 0';
+    adjustErrors = e;
+    return Object.keys(e).length === 0;
+  }
+
+  function clearProductError(field: string) {
+    if (productErrors[field]) {
+      const copy = { ...productErrors };
+      delete copy[field];
+      productErrors = copy;
+    }
+  }
+
   async function handleAddProduct() {
+    if (!validateProduct()) return;
     try {
       await createProduct(newProduct);
       showAddProduct = false;
       newProduct = { sku: '', name: '', purchase_price: 0, sale_price: 0 };
+      productErrors = {};
       await loadInventory();
     } catch (e) { alert('Error: ' + e); }
   }
 
   async function handleAddCategory() {
-    if (!newCategoryName.trim()) return;
+    if (!validateCategory()) return;
     try {
       await createCategory({ name: newCategoryName });
       newCategoryName = '';
+      categoryErrors = {};
       showAddCategory = false;
       await loadInventory();
     } catch (e) { alert('Error: ' + e); }
@@ -59,17 +102,31 @@
     adjustQty = 0;
     adjustType = 'purchase';
     adjustNotes = '';
+    adjustErrors = {};
     showAdjust = true;
   }
 
   async function handleAdjust() {
-    if (!adjustProduct || adjustQty === 0) return;
+    if (!validateAdjust()) return;
+    if (!adjustProduct) return;
     const qty = adjustType === 'adjustment' && adjustQty < 0 ? adjustQty : Math.abs(adjustQty);
     try {
       await adjustInventory(adjustProduct.product.id, qty, adjustType, adjustNotes || undefined);
       showAdjust = false;
       await loadInventory();
     } catch (e) { alert('Error: ' + e); }
+  }
+
+  function openAddProduct() {
+    newProduct = { sku: '', name: '', purchase_price: 0, sale_price: 0 };
+    productErrors = {};
+    showAddProduct = true;
+  }
+
+  function openAddCategory() {
+    newCategoryName = '';
+    categoryErrors = {};
+    showAddCategory = true;
   }
 
   function formatCurrency(n: number) { return `Bs ${n.toFixed(2)}`; }
@@ -86,8 +143,8 @@
       <p class="page-subtitle">Gestiona productos, stock y categorías</p>
     </div>
     <div class="flex gap-md">
-      <button class="btn btn-ghost" onclick={() => showAddCategory = true}>➕ Categoría</button>
-      <button class="btn btn-primary" onclick={() => showAddProduct = true}>➕ Nuevo Producto</button>
+      <button class="btn btn-ghost" onclick={openAddCategory}>➕ Categoría</button>
+      <button class="btn btn-primary" onclick={openAddProduct}>➕ Nuevo Producto</button>
     </div>
   </div>
 
@@ -166,7 +223,8 @@
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg);">
           <div class="input-group">
             <label class="input-label">SKU *</label>
-            <input class="input" bind:value={newProduct.sku} placeholder="P001" />
+            <input class="input" class:input-error={productErrors.sku} bind:value={newProduct.sku} oninput={() => clearProductError('sku')} placeholder="P001" />
+            {#if productErrors.sku}<span class="field-error">{productErrors.sku}</span>{/if}
           </div>
           <div class="input-group">
             <label class="input-label">Código de barras</label>
@@ -175,7 +233,8 @@
         </div>
         <div class="input-group">
           <label class="input-label">Nombre del producto *</label>
-          <input class="input" bind:value={newProduct.name} placeholder="Paracetamol 500mg" />
+          <input class="input" class:input-error={productErrors.name} bind:value={newProduct.name} oninput={() => clearProductError('name')} placeholder="Paracetamol 500mg" />
+          {#if productErrors.name}<span class="field-error">{productErrors.name}</span>{/if}
         </div>
         <div class="input-group">
           <label class="input-label">Categoría</label>
@@ -189,11 +248,13 @@
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg);">
           <div class="input-group">
             <label class="input-label">Precio Compra (Bs) *</label>
-            <input class="input" type="number" bind:value={newProduct.purchase_price} step="0.01" min="0" />
+            <input class="input" class:input-error={productErrors.purchase_price} type="number" bind:value={newProduct.purchase_price} oninput={() => clearProductError('purchase_price')} step="0.01" min="0" />
+            {#if productErrors.purchase_price}<span class="field-error">{productErrors.purchase_price}</span>{/if}
           </div>
           <div class="input-group">
             <label class="input-label">Precio Venta (Bs) *</label>
-            <input class="input" type="number" bind:value={newProduct.sale_price} step="0.01" min="0" />
+            <input class="input" class:input-error={productErrors.sale_price} type="number" bind:value={newProduct.sale_price} oninput={() => clearProductError('sale_price')} step="0.01" min="0" />
+            {#if productErrors.sale_price}<span class="field-error">{productErrors.sale_price}</span>{/if}
           </div>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg);">
@@ -209,7 +270,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick={() => showAddProduct = false}>Cancelar</button>
-        <button class="btn btn-primary" onclick={handleAddProduct} disabled={!newProduct.sku || !newProduct.name}>
+        <button class="btn btn-primary" onclick={handleAddProduct}>
           💾 Guardar Producto
         </button>
       </div>
@@ -227,8 +288,9 @@
       </div>
       <div class="modal-body">
         <div class="input-group">
-          <label class="input-label">Nombre</label>
-          <input class="input" bind:value={newCategoryName} placeholder="Medicamentos" />
+          <label class="input-label">Nombre *</label>
+          <input class="input" class:input-error={categoryErrors.name} bind:value={newCategoryName} oninput={() => { if (categoryErrors.name) categoryErrors = {}; }} placeholder="Medicamentos" />
+          {#if categoryErrors.name}<span class="field-error">{categoryErrors.name}</span>{/if}
         </div>
       </div>
       <div class="modal-footer">
@@ -261,8 +323,9 @@
           </select>
         </div>
         <div class="input-group">
-          <label class="input-label">Cantidad</label>
-          <input class="input" type="number" bind:value={adjustQty} />
+          <label class="input-label">Cantidad *</label>
+          <input class="input" class:input-error={adjustErrors.qty} type="number" bind:value={adjustQty} oninput={() => { if (adjustErrors.qty) adjustErrors = {}; }} />
+          {#if adjustErrors.qty}<span class="field-error">{adjustErrors.qty}</span>{/if}
         </div>
         <div class="input-group">
           <label class="input-label">Notas</label>

@@ -10,7 +10,8 @@
   let showPaymentModal = $state(false);
   let paymentMethod = $state('efectivo');
   let cashReceived = $state(0);
-  let toast = $state({ show: false, message: '', type: 'success' as 'success' | 'error' });
+  let toast = $state({ show: false, message: '', type: 'success' as 'success' | 'error' | 'warning' });
+  let paymentErrors: Record<string, string> = $state({});
 
   // Dashboard quick stats
   let stats = $state({ total_sales_today: 0, total_transactions_today: 0, total_products: 0, low_stock_count: 0, expiring_soon_count: 0 });
@@ -35,7 +36,21 @@
   }
 
   function addToCart(ps: ProductWithStock) {
+    // Validate: stock = 0
+    if (ps.current_stock <= 0) {
+      showToast(`❌ Sin stock disponible para "${ps.product.name}"`, 'error');
+      return;
+    }
+
     const existing = cart.find(c => c.product.product.id === ps.product.id);
+    const currentQty = existing ? existing.quantity : 0;
+
+    // Validate: would exceed available stock
+    if (currentQty + 1 > ps.current_stock) {
+      showToast(`⚠️ Solo hay ${ps.current_stock} unidades disponibles de "${ps.product.name}"`, 'warning');
+      return;
+    }
+
     if (existing) {
       existing.quantity += 1;
       existing.subtotal = existing.quantity * existing.product.product.sale_price - existing.discount;
@@ -59,6 +74,21 @@
       removeFromCart(index);
       return;
     }
+
+    const item = cart[index];
+    const available = item.product.current_stock;
+
+    // Validate: exceeds stock
+    if (qty > available) {
+      showToast(`⚠️ Solo hay ${available} unidades disponibles`, 'warning');
+      return;
+    }
+
+    // Validate: unusually large quantity
+    if (qty > 50) {
+      if (!confirm(`¿Seguro que desea agregar ${qty} unidades de "${item.product.product.name}"?`)) return;
+    }
+
     cart[index].quantity = qty;
     cart[index].subtotal = qty * cart[index].product.product.sale_price - cart[index].discount;
     cart = [...cart];
@@ -82,11 +112,29 @@
 
   function openPayment() {
     if (cart.length === 0) return;
+
+    // Validate: cash register must be open
+    if (!cashRegisterOpen) {
+      showToast('⚠️ Abre la caja registradora antes de cobrar (Configuración → Abrir Caja)', 'warning');
+      return;
+    }
+
     cashReceived = cartTotal();
+    paymentErrors = {};
     showPaymentModal = true;
   }
 
+  function validatePayment(): boolean {
+    const e: Record<string, string> = {};
+    if (paymentMethod === 'efectivo' && cashReceived < cartTotal()) {
+      e.cash = 'El monto recibido es menor al total';
+    }
+    paymentErrors = e;
+    return Object.keys(e).length === 0;
+  }
+
   async function completeSale() {
+    if (!validatePayment()) return;
     try {
       await createSale({
         items: cart.map(c => ({
@@ -110,7 +158,7 @@
     cart = [];
   }
 
-  function showToast(message: string, type: 'success' | 'error') {
+  function showToast(message: string, type: 'success' | 'error' | 'warning') {
     toast = { show: true, message, type };
     setTimeout(() => { toast.show = false; }, 3000);
   }
@@ -131,7 +179,6 @@
             class="input input-lg"
             placeholder="🔍 Buscar producto por nombre, SKU o código de barras..."
             bind:value={searchQuery}
-            autofocus
           />
         </div>
         {#if !cashRegisterOpen}
@@ -163,12 +210,13 @@
             <button
               class="product-card"
               onclick={() => addToCart(ps)}
+              disabled={ps.current_stock <= 0}
               style="
                 background: var(--bg-secondary);
-                border: 1px solid var(--border-color);
+                border: 1px solid {ps.current_stock <= 0 ? 'var(--accent-danger)' : 'var(--border-color)'};
                 border-radius: var(--radius-lg);
                 padding: var(--space-lg);
-                cursor: pointer;
+                cursor: {ps.current_stock <= 0 ? 'not-allowed' : 'pointer'};
                 text-align: left;
                 transition: all var(--transition-fast);
                 display: flex;
@@ -176,13 +224,16 @@
                 gap: var(--space-sm);
                 color: var(--text-primary);
                 font-family: var(--font-family);
+                opacity: {ps.current_stock <= 0 ? '0.5' : '1'};
               "
-              onmouseenter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-primary)'; (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLElement).style.boxShadow = 'var(--shadow-glow-blue)'; }}
-              onmouseleave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-color)'; (e.currentTarget as HTMLElement).style.transform = 'none'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
+              onmouseenter={(e) => { if (ps.current_stock > 0) { (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-primary)'; (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLElement).style.boxShadow = 'var(--shadow-glow-blue)'; }}}
+              onmouseleave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = ps.current_stock <= 0 ? 'var(--accent-danger)' : 'var(--border-color)'; (e.currentTarget as HTMLElement).style.transform = 'none'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
             >
               <div class="flex items-center justify-between">
                 <span class="text-xs text-muted">{ps.product.sku}</span>
-                {#if ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0}
+                {#if ps.current_stock <= 0}
+                  <span class="badge badge-danger">Sin stock</span>
+                {:else if ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0}
                   <span class="badge badge-danger">Bajo</span>
                 {/if}
               </div>
@@ -196,7 +247,7 @@
                 <span style="font-weight: 800; color: var(--accent-primary); font-size: var(--font-size-md);">
                   {formatCurrency(ps.product.sale_price)}
                 </span>
-                <span class="text-xs text-muted">
+                <span class="text-xs" style="color: {ps.current_stock <= 0 ? 'var(--accent-danger)' : 'var(--text-muted)'};">
                   Stock: {ps.current_stock}
                 </span>
               </div>
@@ -283,6 +334,9 @@
               </div>
               <div class="text-xs text-muted">
                 {formatCurrency(item.product.product.sale_price)} × {item.quantity}
+                {#if item.quantity >= item.product.current_stock}
+                  <span style="color: var(--accent-warning); margin-left: var(--space-sm);">· Stock máximo</span>
+                {/if}
               </div>
             </div>
           {/each}
@@ -341,7 +395,7 @@
               class:btn-primary={paymentMethod === method.value}
               class:btn-ghost={paymentMethod !== method.value}
               style="flex: 1; flex-direction: column; padding: var(--space-lg); gap: var(--space-sm);"
-              onclick={() => paymentMethod = method.value}
+              onclick={() => { paymentMethod = method.value; paymentErrors = {}; }}
             >
               <span style="font-size: 1.5rem;">{method.icon}</span>
               <span>{method.label}</span>
@@ -358,15 +412,19 @@
 
         {#if paymentMethod === 'efectivo'}
           <div class="input-group">
-            <label class="input-label">Efectivo recibido</label>
+            <label class="input-label" for="cash-input">Efectivo recibido</label>
             <input
+              id="cash-input"
               class="input input-lg"
+              class:input-error={paymentErrors.cash}
               type="number"
               bind:value={cashReceived}
+              oninput={() => { if (paymentErrors.cash) paymentErrors = {}; }}
               min={cartTotal()}
               step="0.5"
               style="font-size: var(--font-size-xl); font-weight: 700; text-align: center;"
             />
+            {#if paymentErrors.cash}<span class="field-error">{paymentErrors.cash}</span>{/if}
           </div>
 
           {#if change() > 0}
@@ -385,7 +443,6 @@
         <button
           class="btn btn-success btn-lg"
           onclick={completeSale}
-          disabled={paymentMethod === 'efectivo' && cashReceived < cartTotal()}
         >
           ✅ Confirmar Venta
         </button>
@@ -396,7 +453,11 @@
 
 <!-- Toast Notification -->
 {#if toast.show}
-  <div class="toast" class:toast-success={toast.type === 'success'} class:toast-error={toast.type === 'error'}>
+  <div class="toast"
+    class:toast-success={toast.type === 'success'}
+    class:toast-error={toast.type === 'error'}
+    style={toast.type === 'warning' ? 'border-left: 3px solid var(--accent-warning);' : ''}
+  >
     {toast.message}
   </div>
 {/if}

@@ -8,6 +8,7 @@
   let showModal = $state(false);
   let editing: Customer | null = $state(null);
   let form: CreateCustomer = $state({ name: '' });
+  let errors: Record<string, string> = $state({});
 
   onMount(loadCustomers);
 
@@ -19,19 +20,40 @@
     } catch { customers = []; }
   }
 
+  function validate(): boolean {
+    const e: Record<string, string> = {};
+    if (!form.name.trim()) e.name = 'El nombre es obligatorio';
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      e.email = 'El formato de email no es válido';
+    }
+    errors = e;
+    return Object.keys(e).length === 0;
+  }
+
+  function clearError(field: string) {
+    if (errors[field]) {
+      const copy = { ...errors };
+      delete copy[field];
+      errors = copy;
+    }
+  }
+
   function openNew() {
     editing = null;
     form = { name: '' };
+    errors = {};
     showModal = true;
   }
 
   function openEdit(c: Customer) {
     editing = c;
     form = { name: c.name, nit: c.nit || undefined, email: c.email || undefined, phone: c.phone || undefined, address: c.address || undefined };
+    errors = {};
     showModal = true;
   }
 
   async function handleSave() {
+    if (!validate()) return;
     try {
       if (editing) {
         await updateCustomer(editing.id, form);
@@ -39,6 +61,7 @@
         await createCustomer(form);
       }
       showModal = false;
+      errors = {};
       await loadCustomers();
     } catch (e) { alert('Error: ' + e); }
   }
@@ -110,7 +133,8 @@
       <div class="modal-body">
         <div class="input-group">
           <label class="input-label">Nombre *</label>
-          <input class="input" bind:value={form.name} placeholder="Juan Pérez" />
+          <input class="input" class:input-error={errors.name} bind:value={form.name} oninput={() => clearError('name')} placeholder="Juan Pérez" />
+          {#if errors.name}<span class="field-error">{errors.name}</span>{/if}
         </div>
         <div class="input-group">
           <label class="input-label">NIT</label>
@@ -123,7 +147,8 @@
           </div>
           <div class="input-group">
             <label class="input-label">Email</label>
-            <input class="input" type="email" bind:value={form.email} placeholder="email@ejemplo.com" />
+            <input class="input" class:input-error={errors.email} type="email" bind:value={form.email} oninput={() => clearError('email')} placeholder="email@ejemplo.com" />
+            {#if errors.email}<span class="field-error">{errors.email}</span>{/if}
           </div>
         </div>
         <div class="input-group">
@@ -133,7 +158,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick={() => showModal = false}>Cancelar</button>
-        <button class="btn btn-primary" onclick={handleSave} disabled={!form.name}>💾 Guardar</button>
+        <button class="btn btn-primary" onclick={handleSave}>💾 Guardar</button>
       </div>
     </div>
   </div>
