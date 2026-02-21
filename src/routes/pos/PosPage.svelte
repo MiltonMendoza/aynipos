@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { ProductWithStock, CartItem } from '$lib/types';
-  import { getProducts, createSale, getCurrentCashRegister, getDashboardStats } from '$lib/services/api';
+  import { getProducts, getProductByBarcode, createSale, getCurrentCashRegister, getDashboardStats } from '$lib/services/api';
 
   let products: ProductWithStock[] = $state([]);
   let cart: CartItem[] = $state([]);
@@ -15,6 +15,11 @@
   let searchInputRef: HTMLInputElement | undefined = $state(undefined);
   let f4PendingConfirm = $state(false);
 
+  // Barcode detection — try exact barcode match before normal search
+  let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+  let isScanning = $state(false);
+  const BARCODE_MIN_LENGTH = 4;
+
   // Discounts
   let editingItemDiscount: number | null = $state(null);
   let itemDiscountType: 'percent' | 'fixed' = $state('percent');
@@ -26,9 +31,56 @@
   // Dashboard quick stats
   let stats = $state({ total_sales_today: 0, total_transactions_today: 0, total_products: 0, low_stock_count: 0, expiring_soon_count: 0 });
 
-  $effect(() => {
-    loadProducts(searchQuery);
-  });
+  // Unified search handler — debounces input, checks barcode first
+  function handleSearchInput() {
+    if (searchTimeout) clearTimeout(searchTimeout);
+
+    const query = searchQuery.trim();
+
+    // Empty query — load all products immediately
+    if (!query) {
+      loadProducts('');
+      isScanning = false;
+      return;
+    }
+
+    // Show scanning indicator while waiting
+    if (query.length >= BARCODE_MIN_LENGTH) {
+      isScanning = true;
+    }
+
+    // Wait for input to stabilize, then check barcode or search
+    searchTimeout = setTimeout(async () => {
+      const finalQuery = searchQuery.trim();
+      if (!finalQuery) {
+        isScanning = false;
+        loadProducts('');
+        return;
+      }
+
+      // Try exact barcode match first (if long enough)
+      if (finalQuery.length >= BARCODE_MIN_LENGTH) {
+        try {
+          const ps = await getProductByBarcode(finalQuery);
+          if (ps) {
+            console.log(`[Barcode] Match found: "${finalQuery}" → ${ps.product.name}`);
+            addToCart(ps);
+            showToast(`📦 Escaneado: ${ps.product.name}`, 'success');
+            searchQuery = '';
+            isScanning = false;
+            return;
+          }
+        } catch (err) {
+          console.error('[Barcode] Error:', err);
+        }
+      }
+
+      // No barcode match — do normal product search
+      console.log(`[Search] Searching for: "${finalQuery}"`);
+      isScanning = false;
+      loadProducts(finalQuery);
+    }, 400);
+  }
 
   onMount(async () => {
     try {
@@ -37,7 +89,14 @@
       stats = await getDashboardStats();
     } catch { /* first run, no data */ }
     await loadProducts('');
+    // Auto-focus search input for barcode scanner
+    searchInputRef?.focus();
   });
+
+  // Keep search input focused for barcode scanner
+  function refocusSearch() {
+    setTimeout(() => searchInputRef?.focus(), 100);
+  }
 
   async function loadProducts(search: string) {
     try {
@@ -280,6 +339,7 @@
       showPaymentModal = false;
       stats = await getDashboardStats();
       await loadProducts(searchQuery);
+      refocusSearch();
     } catch (e) {
       showToast(`❌ Error: ${e}`, 'error');
     }
@@ -317,7 +377,28 @@
             class="input input-lg"
             placeholder="🔍 Buscar producto por nombre, SKU o código de barras... (F1)"
             bind:value={searchQuery}
+            oninput={handleSearchInput}
           />
+          {#if isScanning}
+            <div style="
+              position: absolute;
+              right: 12px;
+              top: 50%;
+              transform: translateY(-50%);
+              display: flex;
+              align-items: center;
+              gap: var(--space-xs);
+              background: var(--accent-primary);
+              color: white;
+              padding: 2px 10px;
+              border-radius: var(--radius-full);
+              font-size: var(--font-size-xs);
+              font-weight: 600;
+              animation: pulse 1s ease-in-out infinite;
+            ">
+              📡 Escaneando...
+            </div>
+          {/if}
         </div>
         {#if !cashRegisterOpen}
           <span class="badge badge-warning">⚠️ Caja cerrada</span>
@@ -335,7 +416,9 @@
     </div>
 
     <!-- Products grid -->
-    <div style="flex: 1; overflow-y: auto; padding: var(--space-lg);">
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div style="flex: 1; overflow-y: auto; padding: var(--space-lg);" onclick={refocusSearch}>
       {#if products.length === 0}
         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: var(--space-lg); color: var(--text-muted);">
           <div style="font-size: 3rem; opacity: 0.5;">📦</div>

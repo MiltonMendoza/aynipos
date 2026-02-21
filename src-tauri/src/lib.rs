@@ -30,6 +30,7 @@ pub fn run() {
             commands::products::create_product,
             commands::products::update_product,
             commands::products::delete_product,
+            commands::products::get_product_by_barcode,
             // Sales
             commands::sales::create_sale,
             commands::sales::get_sales,

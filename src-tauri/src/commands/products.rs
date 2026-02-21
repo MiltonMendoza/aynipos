@@ -201,6 +201,50 @@ pub fn update_product(db: State<'_, Database>, product: UpdateProduct) -> Result
 }
 
 #[tauri::command]
+pub fn get_product_by_barcode(db: State<'_, Database>, barcode: String) -> Result<Option<ProductWithStock>, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+
+    let mut stmt = conn.prepare(
+        "SELECT p.*, COALESCE(SUM(i.quantity), 0) as current_stock, c.name as category_name
+         FROM products p
+         LEFT JOIN inventory i ON i.product_id = p.id
+         LEFT JOIN categories c ON c.id = p.category_id
+         WHERE p.barcode = ?1 AND p.is_active = 1
+         GROUP BY p.id"
+    ).map_err(|e| e.to_string())?;
+
+    let result = stmt.query_row([&barcode], |row| {
+        Ok(ProductWithStock {
+            product: Product {
+                id: row.get(0)?,
+                sku: row.get(1)?,
+                barcode: row.get(2)?,
+                name: row.get(3)?,
+                description: row.get(4)?,
+                category_id: row.get(5)?,
+                purchase_price: row.get(6)?,
+                sale_price: row.get(7)?,
+                tax_rate: row.get(8)?,
+                unit: row.get(9)?,
+                min_stock: row.get(10)?,
+                is_active: row.get::<_, i32>(11)? == 1,
+                metadata: row.get(12)?,
+                created_at: row.get(13)?,
+                updated_at: row.get(14)?,
+            },
+            current_stock: row.get(15)?,
+            category_name: row.get(16)?,
+        })
+    });
+
+    match result {
+        Ok(product) => Ok(Some(product)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
 pub fn delete_product(db: State<'_, Database>, id: String) -> Result<(), String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     conn.execute(

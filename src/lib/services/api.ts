@@ -19,6 +19,10 @@ export async function getProduct(id: string): Promise<ProductWithStock> {
   return invoke('get_product', { id });
 }
 
+export async function getProductByBarcode(barcode: string): Promise<ProductWithStock | null> {
+  return invoke('get_product_by_barcode', { barcode });
+}
+
 export async function createProduct(product: CreateProduct): Promise<ProductWithStock['product']> {
   return invoke('create_product', { product });
 }
