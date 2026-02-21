@@ -1137,22 +1137,13 @@
 <!-- Success Overlay -->
 {#if showSuccessOverlay}
   <div class="success-overlay">
-    {#each Array(14) as _, i}
-      <div
-        class="confetti-piece"
-        style="
-          left: {5 + (i * 7) % 90}%;
-          background: {['#10b981','#3b82f6','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4'][i % 7]};
-          animation-delay: {(i * 0.08).toFixed(2)}s;
-          animation-duration: {(1.2 + (i % 5) * 0.25).toFixed(2)}s;
-          width: {6 + (i % 3) * 4}px;
-          height: {6 + (i % 4) * 3}px;
-          border-radius: {i % 2 === 0 ? '50%' : '2px'};
-        "
-      />
-    {/each}
-    <div class="success-check-icon">✓</div>
-    <div class="success-text">¡Venta Completada!</div>
+    <div class="success-check-wrapper">
+      <div class="success-ring"></div>
+      <div class="success-ring"></div>
+      <div class="success-ring"></div>
+      <div class="success-check-icon">✓</div>
+    </div>
+    <div class="success-text">Venta registrada correctamente</div>
     <div class="success-amount">{formatCurrency(lastSaleTotal)}</div>
   </div>
 {/if}

@@ -786,14 +786,14 @@ tbody tr:hover {
 }
 
 @keyframes success-check-in {
-  0% { transform: scale(0) rotate(-45deg); opacity: 0; }
-  60% { transform: scale(1.15) rotate(5deg); opacity: 1; }
-  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
-@keyframes confetti-fall {
-  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
-  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+@keyframes ring-expand {
+  0% { transform: scale(0.8); opacity: 0.6; }
+  100% { transform: scale(2.5); opacity: 0; }
 }
 
 .success-overlay {
@@ -810,24 +810,51 @@ tbody tr:hover {
   pointer-events: none;
 }
 
-.success-check-icon {
+.success-check-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.success-ring {
+  position: absolute;
   width: 100px;
   height: 100px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-success);
+  animation: ring-expand 1s ease-out forwards;
+  pointer-events: none;
+}
+
+.success-ring:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.success-ring:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.success-check-icon {
+  width: 90px;
+  height: 90px;
   border-radius: 50%;
   background: var(--accent-success);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 3rem;
+  font-size: 2.5rem;
   color: white;
-  animation: success-check-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  box-shadow: 0 0 60px rgba(16, 185, 129, 0.5), 0 0 120px rgba(16, 185, 129, 0.2);
+  animation: success-check-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  box-shadow: 0 0 40px rgba(16, 185, 129, 0.35);
+  position: relative;
+  z-index: 1;
 }
 
 .success-text {
   margin-top: var(--space-xl);
-  font-size: var(--font-size-xl);
-  font-weight: 700;
+  font-size: var(--font-size-lg);
+  font-weight: 600;
   color: var(--text-primary);
   animation: slideUp var(--transition-base);
   animation-delay: 0.15s;
@@ -836,24 +863,12 @@ tbody tr:hover {
 
 .success-amount {
   margin-top: var(--space-sm);
-  font-size: var(--font-size-3xl);
+  font-size: var(--font-size-2xl);
   font-weight: 800;
   color: var(--accent-success);
   animation: slideUp var(--transition-base);
   animation-delay: 0.25s;
   animation-fill-mode: both;
-  text-shadow: 0 0 30px rgba(16, 185, 129, 0.4);
-}
-
-.confetti-piece {
-  position: fixed;
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  top: -20px;
-  animation: confetti-fall linear forwards;
-  pointer-events: none;
-  z-index: 301;
 }
 
 .toast-shake {
