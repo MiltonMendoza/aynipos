@@ -49,7 +49,7 @@
 
 | # | Feature | Descripción | Estado |
 |---|---------|-------------|--------|
-| 2.1 | **Editar producto** | Modal completo para editar nombre, precios, categoría, stock mínimo, código de barras. | ⬜ Pendiente |
+| 2.1 | **Editar producto** | Modal completo para editar nombre, precios, categoría, stock mínimo, código de barras. | ✅ Completado |
 | 2.2 | **Importar/exportar productos** | Import desde CSV/Excel para carga masiva de catálogo. Export del inventario actual. | ⬜ Pendiente |
 | 2.3 | **Control de lotes y vencimiento** | Asignar número de lote y fecha de vencimiento por cada entrada de inventario. Alertas visuales por colores. | ⬜ Pendiente |
 | 2.4 | **Alertas automáticas** | Notificaciones en la app cuando un producto está bajo stock mínimo o próximo a vencer (7, 15, 30 días). | ⬜ Pendiente |

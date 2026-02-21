@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { ProductWithStock, Category, CreateProduct } from '$lib/types';
-  import { getInventory, adjustInventory, getCategories, createProduct, createCategory } from '$lib/services/api';
+  import type { ProductWithStock, Category, CreateProduct, UpdateProduct } from '$lib/types';
+  import { getInventory, adjustInventory, getCategories, createProduct, createCategory, updateProduct } from '$lib/services/api';
 
   let inventory: ProductWithStock[] = $state([]);
   let categories: Category[] = $state([]);
@@ -13,6 +13,11 @@
   let adjustQty = $state(0);
   let adjustType = $state('purchase');
   let adjustNotes = $state('');
+
+  // Edit product
+  let showEditProduct = $state(false);
+  let editProduct: UpdateProduct = $state({ id: '' });
+  let editErrors: Record<string, string> = $state({});
 
   // New product form
   let newProduct: CreateProduct = $state({
@@ -44,6 +49,7 @@
     const e: Record<string, string> = {};
     if (!newProduct.sku.trim()) e.sku = 'El SKU es obligatorio';
     if (!newProduct.name.trim()) e.name = 'El nombre es obligatorio';
+    if (!newProduct.category_id) e.category_id = 'La categoría es obligatoria';
     if (newProduct.purchase_price <= 0) e.purchase_price = 'El precio de compra debe ser mayor a 0';
     if (newProduct.sale_price <= 0) e.sale_price = 'El precio de venta debe ser mayor a 0';
     if (newProduct.sale_price > 0 && newProduct.purchase_price > 0 && newProduct.sale_price < newProduct.purchase_price) {
@@ -83,7 +89,14 @@
       newProduct = { sku: '', name: '', purchase_price: 0, sale_price: 0 };
       productErrors = {};
       await loadInventory();
-    } catch (e) { alert('Error: ' + e); }
+    } catch (e) {
+      const msg = String(e);
+      if (msg.includes('código de barras')) {
+        productErrors = { ...productErrors, barcode: msg };
+      } else {
+        alert('Error: ' + msg);
+      }
+    }
   }
 
   async function handleAddCategory() {
@@ -127,6 +140,63 @@
     newCategoryName = '';
     categoryErrors = {};
     showAddCategory = true;
+  }
+
+  function openEditProduct(ps: ProductWithStock) {
+    editProduct = {
+      id: ps.product.id,
+      sku: ps.product.sku,
+      barcode: ps.product.barcode ?? undefined,
+      name: ps.product.name,
+      description: ps.product.description ?? undefined,
+      category_id: ps.product.category_id ?? undefined,
+      purchase_price: ps.product.purchase_price,
+      sale_price: ps.product.sale_price,
+      tax_rate: ps.product.tax_rate,
+      unit: ps.product.unit,
+      min_stock: ps.product.min_stock,
+    };
+    editErrors = {};
+    showEditProduct = true;
+  }
+
+  function validateEditProduct(): boolean {
+    const e: Record<string, string> = {};
+    if (!editProduct.sku?.trim()) e.sku = 'El SKU es obligatorio';
+    if (!editProduct.name?.trim()) e.name = 'El nombre es obligatorio';
+    if (!editProduct.category_id) e.category_id = 'La categoría es obligatoria';
+    if ((editProduct.purchase_price ?? 0) <= 0) e.purchase_price = 'El precio de compra debe ser mayor a 0';
+    if ((editProduct.sale_price ?? 0) <= 0) e.sale_price = 'El precio de venta debe ser mayor a 0';
+    if ((editProduct.sale_price ?? 0) > 0 && (editProduct.purchase_price ?? 0) > 0 && (editProduct.sale_price ?? 0) < (editProduct.purchase_price ?? 0)) {
+      e.sale_price = 'El precio de venta debe ser mayor o igual al de compra';
+    }
+    editErrors = e;
+    return Object.keys(e).length === 0;
+  }
+
+  function clearEditError(field: string) {
+    if (editErrors[field]) {
+      const copy = { ...editErrors };
+      delete copy[field];
+      editErrors = copy;
+    }
+  }
+
+  async function handleEditProduct() {
+    if (!validateEditProduct()) return;
+    try {
+      await updateProduct(editProduct);
+      showEditProduct = false;
+      editErrors = {};
+      await loadInventory();
+    } catch (e) {
+      const msg = String(e);
+      if (msg.includes('código de barras')) {
+        editErrors = { ...editErrors, barcode: msg };
+      } else {
+        alert('Error: ' + msg);
+      }
+    }
   }
 
   function formatCurrency(n: number) { return `Bs ${n.toFixed(2)}`; }
@@ -201,6 +271,7 @@
                 {/if}
               </td>
               <td>
+                <button class="btn btn-ghost btn-sm" onclick={() => openEditProduct(ps)}>✏️ Editar</button>
                 <button class="btn btn-ghost btn-sm" onclick={() => openAdjust(ps)}>📊 Ajustar</button>
               </td>
             </tr>
@@ -228,7 +299,8 @@
           </div>
           <div class="input-group">
             <label class="input-label">Código de barras</label>
-            <input class="input" bind:value={newProduct.barcode} placeholder="7890000..." />
+            <input class="input" class:input-error={productErrors.barcode} bind:value={newProduct.barcode} oninput={() => clearProductError('barcode')} placeholder="7890000..." />
+            {#if productErrors.barcode}<span class="field-error">{productErrors.barcode}</span>{/if}
           </div>
         </div>
         <div class="input-group">
@@ -237,13 +309,14 @@
           {#if productErrors.name}<span class="field-error">{productErrors.name}</span>{/if}
         </div>
         <div class="input-group">
-          <label class="input-label">Categoría</label>
-          <select class="select" bind:value={newProduct.category_id}>
-            <option value="">Sin categoría</option>
+          <label class="input-label">Categoría *</label>
+          <select class="select" class:input-error={productErrors.category_id} bind:value={newProduct.category_id} onchange={() => clearProductError('category_id')}>
+            <option value="">Seleccionar categoría</option>
             {#each categories as cat}
               <option value={cat.id}>{cat.name}</option>
             {/each}
           </select>
+          {#if productErrors.category_id}<span class="field-error">{productErrors.category_id}</span>{/if}
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg);">
           <div class="input-group">
@@ -272,6 +345,79 @@
         <button class="btn btn-ghost" onclick={() => showAddProduct = false}>Cancelar</button>
         <button class="btn btn-primary" onclick={handleAddProduct}>
           💾 Guardar Producto
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Edit Product Modal -->
+{#if showEditProduct}
+  <div class="modal-overlay" onclick={() => showEditProduct = false}>
+    <div class="modal modal-lg" onclick={(e) => e.stopPropagation()}>
+      <div class="modal-header">
+        <h3 class="modal-title">✏️ Editar Producto</h3>
+        <button class="btn btn-ghost btn-sm" onclick={() => showEditProduct = false}>✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg);">
+          <div class="input-group">
+            <label class="input-label">SKU *</label>
+            <input class="input" class:input-error={editErrors.sku} bind:value={editProduct.sku} oninput={() => clearEditError('sku')} placeholder="P001" />
+            {#if editErrors.sku}<span class="field-error">{editErrors.sku}</span>{/if}
+          </div>
+          <div class="input-group">
+            <label class="input-label">Código de barras</label>
+            <input class="input" class:input-error={editErrors.barcode} bind:value={editProduct.barcode} oninput={() => clearEditError('barcode')} placeholder="7890000..." />
+            {#if editErrors.barcode}<span class="field-error">{editErrors.barcode}</span>{/if}
+          </div>
+        </div>
+        <div class="input-group">
+          <label class="input-label">Nombre del producto *</label>
+          <input class="input" class:input-error={editErrors.name} bind:value={editProduct.name} oninput={() => clearEditError('name')} placeholder="Paracetamol 500mg" />
+          {#if editErrors.name}<span class="field-error">{editErrors.name}</span>{/if}
+        </div>
+        <div class="input-group">
+          <label class="input-label">Categoría *</label>
+          <select class="select" class:input-error={editErrors.category_id} bind:value={editProduct.category_id} onchange={() => clearEditError('category_id')}>
+            <option value="">Seleccionar categoría</option>
+            {#each categories as cat}
+              <option value={cat.id}>{cat.name}</option>
+            {/each}
+          </select>
+          {#if editErrors.category_id}<span class="field-error">{editErrors.category_id}</span>{/if}
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg);">
+          <div class="input-group">
+            <label class="input-label">Precio Compra (Bs) *</label>
+            <input class="input" class:input-error={editErrors.purchase_price} type="number" bind:value={editProduct.purchase_price} oninput={() => clearEditError('purchase_price')} step="0.01" min="0" />
+            {#if editErrors.purchase_price}<span class="field-error">{editErrors.purchase_price}</span>{/if}
+          </div>
+          <div class="input-group">
+            <label class="input-label">Precio Venta (Bs) *</label>
+            <input class="input" class:input-error={editErrors.sale_price} type="number" bind:value={editProduct.sale_price} oninput={() => clearEditError('sale_price')} step="0.01" min="0" />
+            {#if editErrors.sale_price}<span class="field-error">{editErrors.sale_price}</span>{/if}
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg);">
+          <div class="input-group">
+            <label class="input-label">Unidad</label>
+            <input class="input" bind:value={editProduct.unit} placeholder="unidad" />
+          </div>
+          <div class="input-group">
+            <label class="input-label">Stock mínimo</label>
+            <input class="input" type="number" bind:value={editProduct.min_stock} min="0" />
+          </div>
+        </div>
+        <div class="input-group">
+          <label class="input-label">Descripción</label>
+          <textarea class="input" bind:value={editProduct.description} placeholder="Descripción del producto..." rows="3" style="resize: vertical;"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick={() => showEditProduct = false}>Cancelar</button>
+        <button class="btn btn-primary" onclick={handleEditProduct}>
+          💾 Guardar Cambios
         </button>
       </div>
     </div>

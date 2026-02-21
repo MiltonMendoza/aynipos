@@ -1,5 +1,6 @@
 use crate::db::Database;
 use crate::db::models::*;
+use rusqlite::OptionalExtension;
 use tauri::State;
 use uuid::Uuid;
 
@@ -111,6 +112,20 @@ pub fn create_product(db: State<'_, Database>, product: CreateProduct) -> Result
     let unit = product.unit.unwrap_or_else(|| "unidad".to_string());
     let min_stock = product.min_stock.unwrap_or(0);
 
+    // Validate barcode uniqueness
+    if let Some(ref barcode) = product.barcode {
+        if !barcode.trim().is_empty() {
+            let existing: Option<String> = conn.query_row(
+                "SELECT name FROM products WHERE barcode = ?1 AND is_active = 1",
+                [barcode],
+                |row| row.get(0),
+            ).optional().map_err(|e| e.to_string())?;
+            if let Some(name) = existing {
+                return Err(format!("Ya existe un producto con ese código de barras: {}", name));
+            }
+        }
+    }
+
     conn.execute(
         "INSERT INTO products (id, sku, barcode, name, description, category_id, purchase_price, sale_price, tax_rate, unit, min_stock, metadata)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
@@ -149,6 +164,20 @@ pub fn create_product(db: State<'_, Database>, product: CreateProduct) -> Result
 #[tauri::command]
 pub fn update_product(db: State<'_, Database>, product: UpdateProduct) -> Result<(), String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
+
+    // Validate barcode uniqueness (exclude current product)
+    if let Some(ref barcode) = product.barcode {
+        if !barcode.trim().is_empty() {
+            let existing: Option<String> = conn.query_row(
+                "SELECT name FROM products WHERE barcode = ?1 AND is_active = 1 AND id != ?2",
+                rusqlite::params![barcode, &product.id],
+                |row| row.get(0),
+            ).optional().map_err(|e| e.to_string())?;
+            if let Some(name) = existing {
+                return Err(format!("Ya existe un producto con ese código de barras: {}", name));
+            }
+        }
+    }
 
     let mut updates = Vec::new();
     let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
