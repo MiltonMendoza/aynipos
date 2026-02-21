@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import type { ProductWithStock, CartItem, Customer, CreateCustomer } from '$lib/types';
   import { getProducts, getProductByBarcode, createSale, getCurrentCashRegister, getDashboardStats, getCustomers, createCustomer } from '$lib/services/api';
+  import { playAddSound, playErrorSound, playSuccessSound, playScanSound } from '$lib/services/sounds';
 
   let products: ProductWithStock[] = $state([]);
   let cart: CartItem[] = $state([]);
@@ -46,6 +47,11 @@
   // Dashboard quick stats
   let stats = $state({ total_sales_today: 0, total_transactions_today: 0, total_products: 0, low_stock_count: 0, expiring_soon_count: 0 });
 
+  // Feedback animations
+  let showSuccessOverlay = $state(false);
+  let lastSaleTotal = $state(0);
+  let animatingCartItems: Set<string> = $state(new Set());
+
   // Unified search handler — debounces input, checks barcode first
   function handleSearchInput() {
     if (searchTimeout) clearTimeout(searchTimeout);
@@ -79,7 +85,8 @@
           const ps = await getProductByBarcode(finalQuery);
           if (ps) {
             console.log(`[Barcode] Match found: "${finalQuery}" → ${ps.product.name}`);
-            addToCart(ps);
+            addToCart(ps, true);
+            playScanSound();
             showToast(`📦 Escaneado: ${ps.product.name}`, 'success');
             searchQuery = '';
             isScanning = false;
@@ -244,7 +251,7 @@
     }
   }
 
-  function addToCart(ps: ProductWithStock) {
+  function addToCart(ps: ProductWithStock, fromBarcode = false) {
     // Validate: stock = 0
     if (ps.current_stock <= 0) {
       showToast(`❌ Sin stock disponible para "${ps.product.name}"`, 'error');
@@ -272,6 +279,16 @@
         subtotal: ps.product.sale_price
       }];
     }
+
+    // Audio & visual feedback (skip sound if barcode — playScanSound handles it)
+    if (!fromBarcode) playAddSound();
+
+    // Animate the cart item
+    const pid = ps.product.id;
+    animatingCartItems = new Set([...animatingCartItems, pid]);
+    setTimeout(() => {
+      animatingCartItems = new Set([...animatingCartItems].filter(id => id !== pid));
+    }, 300);
   }
 
   function toggleItemDiscount(index: number) {
@@ -402,6 +419,7 @@
     if (!validatePayment()) return;
     const gd = computedGlobalDiscount();
     try {
+      const saleTotal = cartTotal();
       await createSale({
         customer_id: selectedCustomer?.id || 'default-consumer',
         items: cart.map(c => ({
@@ -413,9 +431,15 @@
         discount_amount: gd > 0 ? gd : undefined,
         notes: saleNotes.trim() || undefined,
       });
-      showToast('✅ Venta completada exitosamente', 'success');
-      clearCart();
+
+      // Success feedback
+      lastSaleTotal = saleTotal;
+      playSuccessSound();
       showPaymentModal = false;
+      showSuccessOverlay = true;
+      setTimeout(() => { showSuccessOverlay = false; }, 2200);
+
+      clearCart();
       stats = await getDashboardStats();
       await loadProducts(searchQuery);
       refocusSearch();
@@ -439,6 +463,7 @@
 
   function showToast(message: string, type: 'success' | 'error' | 'warning') {
     toast = { show: true, message, type };
+    if (type === 'error') playErrorSound();
     setTimeout(() => { toast.show = false; }, 3000);
   }
 
@@ -741,15 +766,19 @@
       {:else}
         <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
           {#each cart as item, index}
-            <div style="
-              background: var(--bg-tertiary);
-              border-radius: var(--radius-md);
-              padding: var(--space-md);
-              display: flex;
-              flex-direction: column;
-              gap: var(--space-sm);
-              animation: slideDown var(--transition-fast);
-            ">
+            <div
+              class:cart-item-pop={animatingCartItems.has(item.product.product.id)}
+              style="
+                background: var(--bg-tertiary);
+                border-radius: var(--radius-md);
+                padding: var(--space-md);
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-sm);
+                animation: slideDown var(--transition-fast);
+                transition: background var(--transition-fast);
+              "
+            >
               <div class="flex items-center justify-between">
                 <span style="font-weight: 600; font-size: var(--font-size-sm);" class="truncate">
                   {item.product.product.name}
@@ -1105,11 +1134,35 @@
   </div>
 {/if}
 
+<!-- Success Overlay -->
+{#if showSuccessOverlay}
+  <div class="success-overlay">
+    {#each Array(14) as _, i}
+      <div
+        class="confetti-piece"
+        style="
+          left: {5 + (i * 7) % 90}%;
+          background: {['#10b981','#3b82f6','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4'][i % 7]};
+          animation-delay: {(i * 0.08).toFixed(2)}s;
+          animation-duration: {(1.2 + (i % 5) * 0.25).toFixed(2)}s;
+          width: {6 + (i % 3) * 4}px;
+          height: {6 + (i % 4) * 3}px;
+          border-radius: {i % 2 === 0 ? '50%' : '2px'};
+        "
+      />
+    {/each}
+    <div class="success-check-icon">✓</div>
+    <div class="success-text">¡Venta Completada!</div>
+    <div class="success-amount">{formatCurrency(lastSaleTotal)}</div>
+  </div>
+{/if}
+
 <!-- Toast Notification -->
 {#if toast.show}
   <div class="toast"
     class:toast-success={toast.type === 'success'}
     class:toast-error={toast.type === 'error'}
+    class:toast-shake={toast.type === 'error'}
     style={toast.type === 'warning' ? 'border-left: 3px solid var(--accent-warning);' : ''}
   >
     {toast.message}
