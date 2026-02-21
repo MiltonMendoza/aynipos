@@ -30,7 +30,7 @@
 | 1.3 | **Descuentos por ítem y globales** | Descuento porcentual o fijo por producto individual, y descuento general aplicado al total de la venta. | ✅ Completado |
 | 1.4 | **Cliente en la venta** | Asociar un cliente (NIT/CI) a la venta desde el POS, con buscador rápido inline. Necesario para facturación. | ✅ Completado |
 | 1.5 | **Notas en la venta** | Campo de observaciones/notas en cada venta para referencia del cajero. | ✅ Completado |
-| 1.6 | **Impresión de recibo** | Generar PDF del recibo/comprobante con datos del negocio y abrir diálogo de impresión del sistema. | ⬜ Pendiente |
+| 1.6 | **Impresión de recibo** | Generar PDF del recibo/comprobante con datos del negocio y abrir diálogo de impresión del sistema. | ✅ Completado |
 | 1.7 | **Sonidos y feedback visual** | Sonido sutil al agregar producto, vibración visual al error, animación de confeti/check en venta completada. | ✅ Completado |
 | 1.8 | **Validaciones robustas** | No vender si stock = 0, alertar si caja cerrada, confirmar cantidades inusualmente grandes, validar precios > 0. | ✅ Completado |
 | 1.9 | **Errores inline en formularios** | Mostrar mensajes de error debajo de cada campo inválido (ej: "SKU es requerido", "El precio debe ser mayor a 0"). No solo deshabilitar el botón, sino indicar claramente qué campo falta o es incorrecto. Aplica a: crear producto, crear cliente, ajustar inventario, abrir/cerrar caja. | ✅ Completado |

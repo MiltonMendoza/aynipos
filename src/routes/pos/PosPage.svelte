@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { ProductWithStock, CartItem, Customer, CreateCustomer } from '$lib/types';
-  import { getProducts, getProductByBarcode, createSale, getCurrentCashRegister, getDashboardStats, getCustomers, createCustomer } from '$lib/services/api';
+  import type { ProductWithStock, CartItem, Customer, CreateCustomer, Sale, SaleItem } from '$lib/types';
+  import { getProducts, getProductByBarcode, createSale, getSaleItems, getCurrentCashRegister, getDashboardStats, getCustomers, createCustomer, getSettings } from '$lib/services/api';
   import { playAddSound, playErrorSound, playSuccessSound, playScanSound } from '$lib/services/sounds';
+  import { printReceipt, extractBusinessInfo, type BusinessInfo } from '$lib/services/receipt';
 
   let products: ProductWithStock[] = $state([]);
   let cart: CartItem[] = $state([]);
@@ -51,6 +52,11 @@
   let showSuccessOverlay = $state(false);
   let lastSaleTotal = $state(0);
   let animatingCartItems: Set<string> = $state(new Set());
+
+  // Receipt printing
+  let businessInfo: BusinessInfo = $state({ name: 'Mi Negocio', nit: '', address: '', phone: '', city: '' });
+  let lastCompletedSale: Sale | null = $state(null);
+  let lastCompletedSaleItems: SaleItem[] = $state([]);
 
   // Unified search handler — debounces input, checks barcode first
   function handleSearchInput() {
@@ -109,6 +115,9 @@
       const cr = await getCurrentCashRegister();
       cashRegisterOpen = cr !== null;
       stats = await getDashboardStats();
+      // Load business info for receipts
+      const allSettings = await getSettings();
+      businessInfo = extractBusinessInfo(allSettings);
     } catch { /* first run, no data */ }
     await loadProducts('');
     // Auto-focus search input for barcode scanner
@@ -420,7 +429,7 @@
     const gd = computedGlobalDiscount();
     try {
       const saleTotal = cartTotal();
-      await createSale({
+      const completedSale = await createSale({
         customer_id: selectedCustomer?.id || 'default-consumer',
         items: cart.map(c => ({
           product_id: c.product.product.id,
@@ -432,12 +441,15 @@
         notes: saleNotes.trim() || undefined,
       });
 
+      // Save sale data for receipt printing
+      lastCompletedSale = completedSale;
+      lastCompletedSaleItems = await getSaleItems(completedSale.id);
+
       // Success feedback
       lastSaleTotal = saleTotal;
       playSuccessSound();
       showPaymentModal = false;
       showSuccessOverlay = true;
-      setTimeout(() => { showSuccessOverlay = false; }, 2200);
 
       clearCart();
       stats = await getDashboardStats();
@@ -446,6 +458,16 @@
     } catch (e) {
       showToast(`❌ Error: ${e}`, 'error');
     }
+  }
+
+  function handlePrintReceipt() {
+    if (lastCompletedSale && lastCompletedSaleItems.length > 0) {
+      printReceipt(lastCompletedSale, lastCompletedSaleItems, businessInfo);
+    }
+  }
+
+  function dismissSuccessOverlay() {
+    showSuccessOverlay = false;
   }
 
   function clearCart() {
@@ -1136,7 +1158,9 @@
 
 <!-- Success Overlay -->
 {#if showSuccessOverlay}
-  <div class="success-overlay">
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="success-overlay" onclick={dismissSuccessOverlay}>
     <div class="success-check-wrapper">
       <div class="success-ring"></div>
       <div class="success-ring"></div>
@@ -1145,6 +1169,42 @@
     </div>
     <div class="success-text">Venta registrada correctamente</div>
     <div class="success-amount">{formatCurrency(lastSaleTotal)}</div>
+    <div style="display: flex; gap: var(--space-md); margin-top: var(--space-xl);">
+      <button
+        class="btn btn-ghost"
+        style="
+          background: rgba(255,255,255,0.15);
+          color: #fff;
+          border: 1px solid rgba(255,255,255,0.3);
+          backdrop-filter: blur(8px);
+          padding: var(--space-md) var(--space-xl);
+          font-size: var(--font-size-md);
+          font-weight: 600;
+          border-radius: var(--radius-lg);
+          cursor: pointer;
+          transition: all 0.2s;
+        "
+        onclick={(e) => { e.stopPropagation(); handlePrintReceipt(); }}
+      >
+        🖨️ Imprimir Recibo
+      </button>
+      <button
+        class="btn btn-ghost"
+        style="
+          background: rgba(255,255,255,0.08);
+          color: rgba(255,255,255,0.7);
+          border: 1px solid rgba(255,255,255,0.15);
+          padding: var(--space-md) var(--space-lg);
+          font-size: var(--font-size-sm);
+          border-radius: var(--radius-lg);
+          cursor: pointer;
+          transition: all 0.2s;
+        "
+        onclick={(e) => { e.stopPropagation(); dismissSuccessOverlay(); }}
+      >
+        Cerrar
+      </button>
+    </div>
   </div>
 {/if}
 

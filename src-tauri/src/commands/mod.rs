@@ -5,3 +5,4 @@ pub mod customers;
 pub mod cash_register;
 pub mod dashboard;
 pub mod settings;
+pub mod receipts;

@@ -57,6 +57,8 @@ pub fn run() {
             commands::settings::get_categories,
             commands::settings::create_category,
             commands::settings::delete_category,
+            // Receipts
+            commands::receipts::save_receipt_html,
         ])
         .run(tauri::generate_context!())
         .expect("error while running AyniPOS");

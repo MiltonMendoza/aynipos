@@ -1,14 +1,20 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Sale, SaleItem } from '$lib/types';
-  import { getSales, getSaleItems, cancelSale } from '$lib/services/api';
+  import { getSales, getSaleItems, cancelSale, getSettings } from '$lib/services/api';
+  import { printReceipt, extractBusinessInfo, type BusinessInfo } from '$lib/services/receipt';
 
   let sales: Sale[] = $state([]);
   let selectedSale: Sale | null = $state(null);
   let saleItems: SaleItem[] = $state([]);
   let loading = $state(true);
+  let businessInfo: BusinessInfo = $state({ name: 'Mi Negocio', nit: '', address: '', phone: '', city: '' });
 
   onMount(async () => {
+    try {
+      const allSettings = await getSettings();
+      businessInfo = extractBusinessInfo(allSettings);
+    } catch { /* ignore */ }
     await loadSales();
   });
 
@@ -175,9 +181,25 @@
         </div>
 
         {#if selectedSale.status === 'completed'}
-          <div style="margin-top: var(--space-xl);">
-            <button class="btn btn-danger btn-block" onclick={() => handleCancel(selectedSale!.id)}>
+          <div style="display: flex; gap: var(--space-md); margin-top: var(--space-xl);">
+            <button
+              class="btn btn-primary"
+              style="flex: 1;"
+              onclick={() => { if (selectedSale) printReceipt(selectedSale, saleItems, businessInfo); }}
+            >
+              🖨️ Imprimir Recibo
+            </button>
+            <button class="btn btn-danger" style="flex: 1;" onclick={() => handleCancel(selectedSale!.id)}>
               🚫 Anular Venta
+            </button>
+          </div>
+        {:else}
+          <div style="margin-top: var(--space-xl);">
+            <button
+              class="btn btn-ghost btn-block"
+              onclick={() => { if (selectedSale) printReceipt(selectedSale, saleItems, businessInfo); }}
+            >
+              🖨️ Imprimir Recibo
             </button>
           </div>
         {/if}

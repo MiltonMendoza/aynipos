@@ -129,3 +129,9 @@ export async function createCategory(category: CreateCategory): Promise<Category
 export async function deleteCategory(id: string): Promise<void> {
   return invoke('delete_category', { id });
 }
+
+// ─── Receipts ──────────────────────────────────────────
+
+export async function saveReceiptHtml(html: string): Promise<string> {
+  return invoke('save_receipt_html', { html });
+}
