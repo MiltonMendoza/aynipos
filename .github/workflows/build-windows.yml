@@ -43,24 +43,62 @@ jobs:
         run: |
           Write-Host "=== Archivos generados en bundle ==="
           Get-ChildItem -Path "src-tauri/target/release/bundle" -Recurse -File | ForEach-Object {
-            Write-Host "$($_.FullName) — $($_.Length) bytes"
+            Write-Host "$($_.FullName) — $($_.Length) bytes — Extension: '$($_.Extension)'"
           }
 
-      - name: Upload NSIS installer
+      - name: Prepare installer for upload
+        shell: pwsh
+        run: |
+          # Crear carpeta de salida
+          New-Item -ItemType Directory -Force -Path "installer-output"
+          
+          # Buscar el .exe generado por NSIS
+          $nsisFiles = Get-ChildItem -Path "src-tauri/target/release/bundle/nsis" -Filter "*.exe" -File
+          
+          if ($nsisFiles.Count -eq 0) {
+            Write-Host "ERROR: No se encontraron archivos .exe en la carpeta NSIS"
+            # Listar todo lo que hay en la carpeta para diagnosticar
+            Write-Host "Contenido de bundle/nsis:"
+            Get-ChildItem -Path "src-tauri/target/release/bundle/nsis" -Recurse | ForEach-Object {
+              Write-Host "  $($_.FullName) — IsDir: $($_.PSIsContainer) — Size: $($_.Length)"
+            }
+            exit 1
+          }
+          
+          foreach ($file in $nsisFiles) {
+            $newName = "AyniPOS-Installer-Windows.exe"
+            Copy-Item $file.FullName -Destination "installer-output/$newName"
+            Write-Host "Copiado: $($file.FullName) -> installer-output/$newName ($($file.Length) bytes)"
+          }
+          
+          Write-Host ""
+          Write-Host "=== Contenido final de installer-output ==="
+          Get-ChildItem -Path "installer-output" -File | ForEach-Object {
+            Write-Host "$($_.Name) — $($_.Length) bytes — Extension: '$($_.Extension)'"
+          }
+
+      - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AyniPOS-Windows-Installer
-          path: src-tauri/target/release/bundle/nsis/*.exe
+          name: AyniPOS-Installer-Windows.exe
+          path: installer-output/AyniPOS-Installer-Windows.exe
           if-no-files-found: error
+          compression-level: 0
 
       - name: Create GitHub Release
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
           name: "AyniPOS ${{ github.ref_name }}"
-          body: "Instalador de AyniPOS para Windows."
+          body: |
+            ## AyniPOS ${{ github.ref_name }}
+            
+            ### Instalación
+            1. Descarga el archivo `AyniPOS-Installer-Windows.exe`
+            2. Ejecuta el instalador
+            3. Sigue las instrucciones en pantalla
           draft: true
           prerelease: false
-          files: src-tauri/target/release/bundle/nsis/*.exe
+          files: installer-output/AyniPOS-Installer-Windows.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
