@@ -101,6 +101,7 @@ export interface Sale {
   id: string;
   sale_number: number;
   customer_id: string | null;
+  customer_name: string | null;
   cash_register_id: string | null;
   subtotal: number;
   tax_amount: number;
@@ -108,6 +109,7 @@ export interface Sale {
   total: number;
   payment_method: string;
   payment_details: string | null;
+  notes: string | null;
   status: string;
   cufd: string | null;
   cuf: string | null;
@@ -134,6 +136,7 @@ export interface CreateSale {
   payment_method: string;
   payment_details?: string;
   discount_amount?: number;
+  notes?: string;
 }
 
 export interface CreateSaleItem {

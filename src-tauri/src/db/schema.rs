@@ -2,6 +2,7 @@ use anyhow::Result;
 use rusqlite::Connection;
 
 const MIGRATION_V1: &str = include_str!("../../migrations/001_initial.sql");
+const MIGRATION_V2: &str = include_str!("../../migrations/002_sale_notes.sql");
 
 pub fn run_migrations(conn: &Connection) -> Result<()> {
     // Create migrations tracking table
@@ -28,6 +29,12 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.execute("INSERT INTO _migrations (version) VALUES (1)", [])?;
     }
 
-    log::info!("Database at version {}", std::cmp::max(current_version, 1));
+    if current_version < 2 {
+        log::info!("Applying migration v2: sale notes");
+        conn.execute_batch(MIGRATION_V2)?;
+        conn.execute("INSERT INTO _migrations (version) VALUES (2)", [])?;
+    }
+
+    log::info!("Database at version {}", std::cmp::max(current_version, 2));
     Ok(())
 }

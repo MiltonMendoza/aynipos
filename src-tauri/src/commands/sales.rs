@@ -79,12 +79,12 @@ pub fn create_sale(db: State<'_, Database>, sale: CreateSale) -> Result<Sale, St
 
     // Insert sale
     conn.execute(
-        "INSERT INTO sales (id, sale_number, customer_id, cash_register_id, subtotal, tax_amount, discount_amount, total, payment_method, payment_details, status)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'completed')",
+        "INSERT INTO sales (id, sale_number, customer_id, cash_register_id, subtotal, tax_amount, discount_amount, total, payment_method, payment_details, status, notes)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'completed', ?11)",
         rusqlite::params![
             &sale_id, sale_number, &sale.customer_id, &cash_register_id,
             subtotal, tax_amount, discount_amount, total,
-            &sale.payment_method, &sale.payment_details
+            &sale.payment_method, &sale.payment_details, &sale.notes
         ],
     ).map_err(|e| e.to_string())?;
 
@@ -125,10 +125,22 @@ pub fn create_sale(db: State<'_, Database>, sale: CreateSale) -> Result<Sale, St
         [sale_number.to_string()],
     ).map_err(|e| e.to_string())?;
 
+    // Look up customer name
+    let customer_name: Option<String> = if let Some(ref cid) = sale.customer_id {
+        conn.query_row(
+            "SELECT name FROM customers WHERE id = ?1",
+            [cid],
+            |row| row.get(0),
+        ).ok()
+    } else {
+        None
+    };
+
     Ok(Sale {
         id: sale_id,
         sale_number,
         customer_id: sale.customer_id,
+        customer_name,
         cash_register_id,
         subtotal,
         tax_amount,
@@ -136,6 +148,7 @@ pub fn create_sale(db: State<'_, Database>, sale: CreateSale) -> Result<Sale, St
         total,
         payment_method: sale.payment_method,
         payment_details: sale.payment_details,
+        notes: sale.notes,
         status: "completed".to_string(),
         cufd: None,
         cuf: None,
@@ -148,29 +161,31 @@ pub fn create_sale(db: State<'_, Database>, sale: CreateSale) -> Result<Sale, St
 pub fn get_sales(db: State<'_, Database>, date_from: Option<String>, date_to: Option<String>, status: Option<String>) -> Result<Vec<Sale>, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
-    let mut query = String::from("SELECT * FROM sales WHERE 1=1");
+    let mut query = String::from(
+        "SELECT s.*, c.name as customer_name FROM sales s LEFT JOIN customers c ON s.customer_id = c.id WHERE 1=1"
+    );
     let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
     let mut idx = 1;
 
     if let Some(ref from) = date_from {
-        query.push_str(&format!(" AND created_at >= ?{}", idx));
+        query.push_str(&format!(" AND s.created_at >= ?{}", idx));
         params.push(Box::new(from.clone()));
         idx += 1;
     }
 
     if let Some(ref to) = date_to {
-        query.push_str(&format!(" AND created_at <= ?{}", idx));
+        query.push_str(&format!(" AND s.created_at <= ?{}", idx));
         params.push(Box::new(to.clone()));
         idx += 1;
     }
 
     if let Some(ref s) = status {
-        query.push_str(&format!(" AND status = ?{}", idx));
+        query.push_str(&format!(" AND s.status = ?{}", idx));
         params.push(Box::new(s.clone()));
         // idx += 1;
     }
 
-    query.push_str(" ORDER BY created_at DESC");
+    query.push_str(" ORDER BY s.created_at DESC");
 
     let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
     let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
@@ -180,6 +195,7 @@ pub fn get_sales(db: State<'_, Database>, date_from: Option<String>, date_to: Op
             id: row.get(0)?,
             sale_number: row.get(1)?,
             customer_id: row.get(2)?,
+            customer_name: row.get(17)?,
             cash_register_id: row.get(3)?,
             subtotal: row.get(4)?,
             tax_amount: row.get(5)?,
@@ -187,6 +203,7 @@ pub fn get_sales(db: State<'_, Database>, date_from: Option<String>, date_to: Op
             total: row.get(7)?,
             payment_method: row.get(8)?,
             payment_details: row.get(9)?,
+            notes: row.get(16)?,
             status: row.get(10)?,
             cufd: row.get(11)?,
             cuf: row.get(12)?,

@@ -129,6 +129,7 @@ pub struct Sale {
     pub id: String,
     pub sale_number: i64,
     pub customer_id: Option<String>,
+    pub customer_name: Option<String>,
     pub cash_register_id: Option<String>,
     pub subtotal: f64,
     pub tax_amount: f64,
@@ -136,6 +137,7 @@ pub struct Sale {
     pub total: f64,
     pub payment_method: String,
     pub payment_details: Option<String>,
+    pub notes: Option<String>,
     pub status: String,
     pub cufd: Option<String>,
     pub cuf: Option<String>,
@@ -164,6 +166,7 @@ pub struct CreateSale {
     pub payment_method: String,
     pub payment_details: Option<String>,
     pub discount_amount: Option<f64>,
+    pub notes: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

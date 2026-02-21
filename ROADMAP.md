@@ -28,8 +28,8 @@
 | 1.1 | **Atajos de teclado** | `F1` = buscar producto, `F2` = cobrar, `Esc` = cerrar modal, `+/-` = cantidad. Esencial para velocidad en caja. | ✅ Completado |
 | 1.2 | **Lector de código de barras** | Input auto-focus que detecte escaneo rápido (caracteres en < 50ms) y agregue al carrito automáticamente. | ✅ Completado |
 | 1.3 | **Descuentos por ítem y globales** | Descuento porcentual o fijo por producto individual, y descuento general aplicado al total de la venta. | ✅ Completado |
-| 1.4 | **Cliente en la venta** | Asociar un cliente (NIT/CI) a la venta desde el POS, con buscador rápido inline. Necesario para facturación. | ⬜ Pendiente |
-| 1.5 | **Notas en la venta** | Campo de observaciones/notas en cada venta para referencia del cajero. | ⬜ Pendiente |
+| 1.4 | **Cliente en la venta** | Asociar un cliente (NIT/CI) a la venta desde el POS, con buscador rápido inline. Necesario para facturación. | ✅ Completado |
+| 1.5 | **Notas en la venta** | Campo de observaciones/notas en cada venta para referencia del cajero. | ✅ Completado |
 | 1.6 | **Impresión de recibo** | Generar PDF del recibo/comprobante con datos del negocio y abrir diálogo de impresión del sistema. | ⬜ Pendiente |
 | 1.7 | **Sonidos y feedback visual** | Sonido sutil al agregar producto, vibración visual al error, animación de confeti/check en venta completada. | ⬜ Pendiente |
 | 1.8 | **Validaciones robustas** | No vender si stock = 0, alertar si caja cerrada, confirmar cantidades inusualmente grandes, validar precios > 0. | ✅ Completado |

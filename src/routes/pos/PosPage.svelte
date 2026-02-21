@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { ProductWithStock, CartItem } from '$lib/types';
-  import { getProducts, getProductByBarcode, createSale, getCurrentCashRegister, getDashboardStats } from '$lib/services/api';
+  import type { ProductWithStock, CartItem, Customer, CreateCustomer } from '$lib/types';
+  import { getProducts, getProductByBarcode, createSale, getCurrentCashRegister, getDashboardStats, getCustomers, createCustomer } from '$lib/services/api';
 
   let products: ProductWithStock[] = $state([]);
   let cart: CartItem[] = $state([]);
@@ -15,6 +15,10 @@
   let searchInputRef: HTMLInputElement | undefined = $state(undefined);
   let f4PendingConfirm = $state(false);
 
+  // Sale notes
+  let saleNotes = $state('');
+  let showNotes = $state(false);
+
   // Barcode detection — try exact barcode match before normal search
   let searchTimeout: ReturnType<typeof setTimeout> | null = null;
   let isScanning = $state(false);
@@ -27,6 +31,17 @@
   let globalDiscountType: 'percent' | 'fixed' = $state('fixed');
   let globalDiscountInput: number = $state(0);
   let showGlobalDiscount = $state(false);
+
+  // Customer selection
+  let selectedCustomer: Customer | null = $state(null);
+  let customerSearch = $state('');
+  let customerResults: Customer[] = $state([]);
+  let showCustomerSearch = $state(false);
+  let showCreateCustomer = $state(false);
+  let customerSearchTimeout: ReturnType<typeof setTimeout> | null = null;
+  let newCustomer: CreateCustomer = $state({ name: '', nit: '' });
+  let customerErrors: Record<string, string> = $state({});
+  let customerSearchInputRef: HTMLInputElement | undefined = $state(undefined);
 
   // Dashboard quick stats
   let stats = $state({ total_sales_today: 0, total_transactions_today: 0, total_products: 0, low_stock_count: 0, expiring_soon_count: 0 });
@@ -104,6 +119,61 @@
     } catch { products = []; }
   }
 
+  // ─── Customer Search ───
+  function handleCustomerSearch() {
+    if (customerSearchTimeout) clearTimeout(customerSearchTimeout);
+    const query = customerSearch.trim();
+    if (!query) { customerResults = []; return; }
+    customerSearchTimeout = setTimeout(async () => {
+      try {
+        customerResults = await getCustomers(customerSearch.trim());
+      } catch { customerResults = []; }
+    }, 300);
+  }
+
+  function selectCustomer(customer: Customer) {
+    selectedCustomer = customer;
+    showCustomerSearch = false;
+    showCreateCustomer = false;
+    customerSearch = '';
+    customerResults = [];
+  }
+
+  function clearCustomer() {
+    selectedCustomer = null;
+  }
+
+  function toggleCustomerSearch() {
+    showCustomerSearch = !showCustomerSearch;
+    showCreateCustomer = false;
+    customerSearch = '';
+    customerResults = [];
+    if (showCustomerSearch) {
+      setTimeout(() => customerSearchInputRef?.focus(), 100);
+    }
+  }
+
+  function validateNewCustomer(): boolean {
+    const e: Record<string, string> = {};
+    if (!newCustomer.name.trim()) e.name = 'El nombre es requerido';
+    customerErrors = e;
+    return Object.keys(e).length === 0;
+  }
+
+  async function handleCreateCustomer() {
+    if (!validateNewCustomer()) return;
+    try {
+      const created = await createCustomer(newCustomer);
+      selectCustomer(created);
+      showCreateCustomer = false;
+      newCustomer = { name: '', nit: '' };
+      customerErrors = {};
+      showToast(`👤 Cliente "${created.name}" creado`, 'success');
+    } catch (e) {
+      showToast(`❌ Error: ${e}`, 'error');
+    }
+  }
+
   // ─── Keyboard Shortcuts ───
   function handleKeydown(e: KeyboardEvent) {
     const tag = (e.target as HTMLElement)?.tagName;
@@ -127,6 +197,13 @@
     if (e.key === 'F2') {
       e.preventDefault();
       openPayment();
+      return;
+    }
+
+    // F3 — toggle customer selector
+    if (e.key === 'F3') {
+      e.preventDefault();
+      toggleCustomerSearch();
       return;
     }
 
@@ -326,6 +403,7 @@
     const gd = computedGlobalDiscount();
     try {
       await createSale({
+        customer_id: selectedCustomer?.id || 'default-consumer',
         items: cart.map(c => ({
           product_id: c.product.product.id,
           quantity: c.quantity,
@@ -333,6 +411,7 @@
         })),
         payment_method: paymentMethod,
         discount_amount: gd > 0 ? gd : undefined,
+        notes: saleNotes.trim() || undefined,
       });
       showToast('✅ Venta completada exitosamente', 'success');
       clearCart();
@@ -351,6 +430,11 @@
     globalDiscountType = 'fixed';
     showGlobalDiscount = false;
     editingItemDiscount = null;
+    selectedCustomer = null;
+    showCustomerSearch = false;
+    showCreateCustomer = false;
+    saleNotes = '';
+    showNotes = false;
   }
 
   function showToast(message: string, type: 'success' | 'error' | 'warning') {
@@ -494,6 +578,156 @@
           <button class="btn btn-ghost btn-sm" onclick={clearCart}>Limpiar (F4)</button>
         {/if}
       </div>
+    </div>
+
+    <!-- Customer section -->
+    <div style="padding: var(--space-sm) var(--space-lg); border-bottom: 1px solid var(--border-color); background: var(--bg-tertiary);">
+      {#if !showCustomerSearch && !showCreateCustomer}
+        <!-- Selected customer display -->
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-sm" style="min-width: 0;">
+            <span style="font-size: var(--font-size-sm);">👤</span>
+            <div style="min-width: 0;">
+              <div style="font-weight: 600; font-size: var(--font-size-sm);" class="truncate">
+                {selectedCustomer ? selectedCustomer.name : 'Sin Nombre'}
+              </div>
+              <div class="text-xs text-muted">
+                NIT: {selectedCustomer?.nit || '0'}
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center gap-xs">
+            {#if selectedCustomer}
+              <button
+                class="btn btn-ghost btn-sm"
+                style="padding: 2px 6px; font-size: var(--font-size-xs); color: var(--accent-danger);"
+                onclick={clearCustomer}
+                title="Quitar cliente"
+              >✕</button>
+            {/if}
+            <button
+              class="btn btn-ghost btn-sm"
+              style="padding: 2px 8px; font-size: var(--font-size-xs);"
+              onclick={toggleCustomerSearch}
+            >
+              {selectedCustomer ? 'Cambiar' : '+ Cliente'} (F3)
+            </button>
+          </div>
+        </div>
+      {:else if showCustomerSearch}
+        <!-- Customer search dropdown -->
+        <div style="display: flex; flex-direction: column; gap: var(--space-sm); animation: slideDown var(--transition-fast);">
+          <div class="flex items-center gap-sm">
+            <input
+              bind:this={customerSearchInputRef}
+              class="input"
+              style="flex: 1; padding: var(--space-xs) var(--space-sm); font-size: var(--font-size-sm);"
+              placeholder="🔍 Buscar por nombre, NIT o teléfono..."
+              bind:value={customerSearch}
+              oninput={handleCustomerSearch}
+              onkeydown={(e) => { if (e.key === 'Escape') { toggleCustomerSearch(); e.stopPropagation(); }}}
+            />
+            <button
+              class="btn btn-ghost btn-sm"
+              style="padding: 2px 6px; font-size: var(--font-size-xs);"
+              onclick={toggleCustomerSearch}
+            >✕</button>
+          </div>
+
+          <!-- Search results -->
+          {#if customerResults.length > 0}
+            <div style="
+              max-height: 180px;
+              overflow-y: auto;
+              display: flex;
+              flex-direction: column;
+              gap: 2px;
+              border-radius: var(--radius-sm);
+            ">
+              {#each customerResults.slice(0, 6) as customer}
+                <button
+                  class="btn btn-ghost"
+                  style="
+                    width: 100%;
+                    justify-content: flex-start;
+                    text-align: left;
+                    padding: var(--space-xs) var(--space-sm);
+                    font-size: var(--font-size-sm);
+                    border-radius: var(--radius-sm);
+                    gap: var(--space-sm);
+                  "
+                  onclick={() => selectCustomer(customer)}
+                >
+                  <span>👤</span>
+                  <div style="min-width: 0; flex: 1;">
+                    <div style="font-weight: 600;" class="truncate">{customer.name}</div>
+                    <div class="text-xs text-muted">
+                      {#if customer.nit}NIT: {customer.nit}{/if}
+                      {#if customer.phone}{customer.nit ? ' · ' : ''}Tel: {customer.phone}{/if}
+                    </div>
+                  </div>
+                </button>
+              {/each}
+            </div>
+          {:else if customerSearch.trim().length > 0}
+            <div class="text-xs text-muted" style="text-align: center; padding: var(--space-sm);">
+              No se encontraron clientes
+            </div>
+          {/if}
+
+          <!-- Create new customer button -->
+          <button
+            class="btn btn-ghost btn-sm"
+            style="font-size: var(--font-size-xs); color: var(--accent-primary); align-self: flex-start; padding: 2px var(--space-sm);"
+            onclick={() => { showCreateCustomer = true; showCustomerSearch = false; newCustomer = { name: customerSearch.trim() || '', nit: '' }; customerErrors = {}; }}
+          >
+            ➕ Crear nuevo cliente
+          </button>
+        </div>
+      {:else if showCreateCustomer}
+        <!-- Quick create customer form -->
+        <div style="display: flex; flex-direction: column; gap: var(--space-sm); animation: slideDown var(--transition-fast);">
+          <div class="flex items-center justify-between">
+            <span style="font-weight: 600; font-size: var(--font-size-sm);">➕ Nuevo Cliente</span>
+            <button
+              class="btn btn-ghost btn-sm"
+              style="padding: 2px 6px; font-size: var(--font-size-xs);"
+              onclick={() => { showCreateCustomer = false; customerErrors = {}; }}
+            >✕</button>
+          </div>
+          <div>
+            <input
+              class="input"
+              class:input-error={customerErrors.name}
+              style="padding: var(--space-xs) var(--space-sm); font-size: var(--font-size-sm);"
+              placeholder="Nombre del cliente *"
+              bind:value={newCustomer.name}
+              oninput={() => { if (customerErrors.name) { const { name: _, ...rest } = customerErrors; customerErrors = rest; } }}
+              onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCreateCustomer(); } if (e.key === 'Escape') { showCreateCustomer = false; e.stopPropagation(); }}}
+            />
+            {#if customerErrors.name}<span class="field-error">{customerErrors.name}</span>{/if}
+          </div>
+          <input
+            class="input"
+            style="padding: var(--space-xs) var(--space-sm); font-size: var(--font-size-sm);"
+            placeholder="NIT / CI (opcional)"
+            bind:value={newCustomer.nit}
+            onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCreateCustomer(); } if (e.key === 'Escape') { showCreateCustomer = false; e.stopPropagation(); }}}
+          />
+          <div class="flex gap-sm">
+            <button
+              class="btn btn-ghost btn-sm"
+              style="flex: 1; font-size: var(--font-size-xs);"
+              onclick={() => { showCreateCustomer = false; customerErrors = {}; }}
+            >Cancelar</button>
+            <button
+              class="btn btn-primary btn-sm"
+              style="flex: 1; font-size: var(--font-size-xs);"
+              onclick={handleCreateCustomer}
+            >Guardar</button>
+          </div>
+        </div>
+      {/if}
     </div>
 
     <!-- Cart items -->
@@ -698,6 +932,53 @@
           {/if}
         {/if}
 
+        <!-- Sale Notes -->
+        {#if !showNotes}
+          <button
+            class="btn btn-ghost btn-sm"
+            style="font-size: var(--font-size-xs); align-self: flex-start; padding: 2px var(--space-sm); color: var(--text-muted);"
+            onclick={() => showNotes = true}
+          >
+            📝 {saleNotes.trim() ? 'Editar nota' : '+ Agregar nota'}
+            {#if saleNotes.trim()}
+              <span style="color: var(--accent-primary); margin-left: var(--space-xs);">✓</span>
+            {/if}
+          </button>
+        {:else}
+          <div style="
+            background: var(--bg-elevated);
+            border-radius: var(--radius-sm);
+            padding: var(--space-sm) var(--space-md);
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-xs);
+            animation: slideDown var(--transition-fast);
+          ">
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-muted">📝 Nota de la venta</span>
+              <button
+                class="btn btn-ghost btn-sm"
+                style="padding: 2px 6px; font-size: var(--font-size-xs);"
+                onclick={() => showNotes = false}
+              >✕</button>
+            </div>
+            <textarea
+              class="input"
+              style="
+                padding: var(--space-xs) var(--space-sm);
+                font-size: var(--font-size-sm);
+                resize: vertical;
+                min-height: 48px;
+                max-height: 100px;
+                font-family: var(--font-family);
+              "
+              placeholder="Observaciones de la venta..."
+              bind:value={saleNotes}
+              onkeydown={(e) => { if (e.key === 'Escape') { showNotes = false; e.stopPropagation(); }}}
+            ></textarea>
+          </div>
+        {/if}
+
         <div style="height: 1px; background: var(--border-color); margin: var(--space-xs) 0;"></div>
         <div class="flex justify-between" style="font-size: var(--font-size-xl); font-weight: 800;">
           <span>Total</span>
@@ -745,6 +1026,36 @@
             </button>
           {/each}
         </div>
+
+        <!-- Customer info -->
+        <div style="
+          display: flex;
+          align-items: center;
+          gap: var(--space-sm);
+          padding: var(--space-sm) var(--space-md);
+          background: var(--bg-elevated);
+          border-radius: var(--radius-md);
+          font-size: var(--font-size-sm);
+        ">
+          <span>👤</span>
+          <span style="font-weight: 600;">{selectedCustomer ? selectedCustomer.name : 'Sin Nombre'}</span>
+          <span class="text-xs text-muted">NIT: {selectedCustomer?.nit || '0'}</span>
+        </div>
+
+        {#if saleNotes.trim()}
+          <div style="
+            display: flex;
+            align-items: flex-start;
+            gap: var(--space-sm);
+            padding: var(--space-sm) var(--space-md);
+            background: var(--bg-elevated);
+            border-radius: var(--radius-md);
+            font-size: var(--font-size-sm);
+          ">
+            <span>📝</span>
+            <span class="text-muted" style="word-break: break-word;">{saleNotes.trim()}</span>
+          </div>
+        {/if}
 
         <div style="background: var(--bg-tertiary); border-radius: var(--radius-lg); padding: var(--space-xl); text-align: center;">
           <div class="text-sm text-muted" style="margin-bottom: var(--space-sm);">Total a cobrar</div>

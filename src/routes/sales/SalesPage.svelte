@@ -69,6 +69,7 @@
           <tr>
             <th>#</th>
             <th>Fecha</th>
+            <th>Cliente</th>
             <th>Total</th>
             <th>Pago</th>
             <th>Estado</th>
@@ -76,7 +77,7 @@
         </thead>
         <tbody>
           {#if sales.length === 0}
-            <tr><td colspan="5" class="text-center text-muted" style="padding: var(--space-3xl);">No hay ventas registradas</td></tr>
+            <tr><td colspan="6" class="text-center text-muted" style="padding: var(--space-3xl);">No hay ventas registradas</td></tr>
           {:else}
             {#each sales as sale}
               <tr
@@ -85,6 +86,9 @@
               >
                 <td style="font-weight: 700;">#{sale.sale_number}</td>
                 <td>{formatDate(sale.created_at)}</td>
+                <td class="text-sm">
+                  <div class="truncate" style="max-width: 120px;">{sale.customer_name || 'Sin Nombre'}</div>
+                </td>
                 <td style="font-weight: 700; color: var(--accent-success);">{formatCurrency(sale.total)}</td>
                 <td>
                   {#if sale.payment_method === 'efectivo'}💵
@@ -108,6 +112,29 @@
           <h3 style="font-weight: 700;">Venta #{selectedSale.sale_number}</h3>
           <span class="badge {statusBadge(selectedSale.status).class}">{statusBadge(selectedSale.status).label}</span>
         </div>
+
+        <!-- Customer info -->
+        <div class="flex items-center gap-sm" style="margin-bottom: var(--space-lg); padding: var(--space-sm) var(--space-md); background: var(--bg-tertiary); border-radius: var(--radius-md);">
+          <span style="font-size: var(--font-size-sm);">👤</span>
+          <div>
+            <div style="font-weight: 600; font-size: var(--font-size-sm);">{selectedSale.customer_name || 'Sin Nombre'}</div>
+          </div>
+        </div>
+
+        {#if selectedSale.notes}
+          <div style="
+            display: flex;
+            align-items: flex-start;
+            gap: var(--space-sm);
+            margin-bottom: var(--space-lg);
+            padding: var(--space-sm) var(--space-md);
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+          ">
+            <span style="font-size: var(--font-size-sm);">📝</span>
+            <div style="font-size: var(--font-size-sm); color: var(--text-muted); word-break: break-word;">{selectedSale.notes}</div>
+          </div>
+        {/if}
 
         <div style="display: flex; flex-direction: column; gap: var(--space-md); margin-bottom: var(--space-xl);">
           {#each saleItems as item}
