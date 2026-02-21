@@ -6,7 +6,8 @@ import type {
   CashRegister,
   InventoryMovement,
   DashboardStats,
-  Setting, Category, CreateCategory
+  Setting, Category, CreateCategory,
+  ImportResult
 } from '$lib/types';
 
 // ─── Products ──────────────────────────────────────────
@@ -33,6 +34,16 @@ export async function updateProduct(product: UpdateProduct): Promise<void> {
 
 export async function deleteProduct(id: string): Promise<void> {
   return invoke('delete_product', { id });
+}
+
+// ─── Import/Export ─────────────────────────────────────
+
+export async function exportProductsCsv(filePath: string): Promise<number> {
+  return invoke('export_products_csv', { filePath });
+}
+
+export async function importProductsCsv(filePath: string): Promise<ImportResult> {
+  return invoke('import_products_csv', { filePath });
 }
 
 // ─── Sales ─────────────────────────────────────────────

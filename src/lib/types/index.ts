@@ -187,6 +187,19 @@ export interface Setting {
   value: string;
 }
 
+// ─── Import/Export ─────────────────────────────────────
+
+export interface ImportResult {
+  created: number;
+  updated: number;
+  errors: ImportError[];
+}
+
+export interface ImportError {
+  row: number;
+  message: string;
+}
+
 // ─── Cart (Frontend only) ──────────────────────────────
 
 export interface CartItem {

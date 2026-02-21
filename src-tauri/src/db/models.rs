@@ -217,3 +217,18 @@ pub struct ProductWithStock {
     pub current_stock: f64,
     pub category_name: Option<String>,
 }
+
+// ─── Import/Export ─────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportResult {
+    pub created: u32,
+    pub updated: u32,
+    pub errors: Vec<ImportError>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportError {
+    pub row: u32,
+    pub message: String,
+}

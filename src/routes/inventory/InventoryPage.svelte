@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { ProductWithStock, Category, CreateProduct, UpdateProduct } from '$lib/types';
-  import { getInventory, adjustInventory, getCategories, createProduct, createCategory, updateProduct } from '$lib/services/api';
+  import type { ProductWithStock, Category, CreateProduct, UpdateProduct, ImportResult } from '$lib/types';
+  import { getInventory, adjustInventory, getCategories, createProduct, createCategory, updateProduct, exportProductsCsv, importProductsCsv } from '$lib/services/api';
+  import { save, open } from '@tauri-apps/plugin-dialog';
 
   let inventory: ProductWithStock[] = $state([]);
   let categories: Category[] = $state([]);
@@ -29,6 +30,12 @@
   let productErrors: Record<string, string> = $state({});
   let categoryErrors: Record<string, string> = $state({});
   let adjustErrors: Record<string, string> = $state({});
+
+  // Import/Export
+  let showImportResult = $state(false);
+  let importResult: ImportResult | null = $state(null);
+  let isExporting = $state(false);
+  let isImporting = $state(false);
 
   onMount(loadInventory);
 
@@ -201,6 +208,44 @@
 
   function formatCurrency(n: number) { return `Bs ${n.toFixed(2)}`; }
 
+  async function handleExportCsv() {
+    isExporting = true;
+    try {
+      const filePath = await save({
+        title: 'Exportar productos a CSV',
+        defaultPath: 'productos.csv',
+        filters: [{ name: 'CSV', extensions: ['csv'] }],
+      });
+      if (!filePath) { isExporting = false; return; }
+      const count = await exportProductsCsv(filePath);
+      alert(`✅ Se exportaron ${count} productos a CSV`);
+    } catch (e) {
+      alert('Error al exportar: ' + e);
+    } finally {
+      isExporting = false;
+    }
+  }
+
+  async function handleImportCsv() {
+    isImporting = true;
+    try {
+      const selected = await open({
+        title: 'Importar productos desde CSV',
+        multiple: false,
+        filters: [{ name: 'CSV', extensions: ['csv'] }],
+      });
+      if (!selected) { isImporting = false; return; }
+      const result = await importProductsCsv(selected);
+      importResult = result;
+      showImportResult = true;
+      await loadInventory();
+    } catch (e) {
+      alert('Error al importar: ' + e);
+    } finally {
+      isImporting = false;
+    }
+  }
+
   $effect(() => {
     loadInventory();
   });
@@ -213,6 +258,12 @@
       <p class="page-subtitle">Gestiona productos, stock y categorías</p>
     </div>
     <div class="flex gap-md">
+      <button class="btn btn-ghost" onclick={handleImportCsv} disabled={isImporting}>
+        {isImporting ? '⏳ Importando...' : '📥 Importar CSV'}
+      </button>
+      <button class="btn btn-ghost" onclick={handleExportCsv} disabled={isExporting}>
+        {isExporting ? '⏳ Exportando...' : '📤 Exportar CSV'}
+      </button>
       <button class="btn btn-ghost" onclick={openAddCategory}>➕ Categoría</button>
       <button class="btn btn-primary" onclick={openAddProduct}>➕ Nuevo Producto</button>
     </div>
@@ -481,6 +532,58 @@
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick={() => showAdjust = false}>Cancelar</button>
         <button class="btn btn-primary" onclick={handleAdjust}>✅ Aplicar</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Import Result Modal -->
+{#if showImportResult && importResult}
+  <div class="modal-overlay" onclick={() => showImportResult = false}>
+    <div class="modal" onclick={(e) => e.stopPropagation()}>
+      <div class="modal-header">
+        <h3 class="modal-title">📥 Resultado de Importación</h3>
+        <button class="btn btn-ghost btn-sm" onclick={() => showImportResult = false}>✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-lg); margin-bottom: var(--space-xl);">
+          <div class="stat-card" style="text-align: center;">
+            <div style="font-size: var(--font-size-2xl); font-weight: 700; color: var(--accent-success);">{importResult.created}</div>
+            <div class="text-sm text-muted">✅ Creados</div>
+          </div>
+          <div class="stat-card" style="text-align: center;">
+            <div style="font-size: var(--font-size-2xl); font-weight: 700; color: var(--accent-primary);">{importResult.updated}</div>
+            <div class="text-sm text-muted">🔄 Actualizados</div>
+          </div>
+          <div class="stat-card" style="text-align: center;">
+            <div style="font-size: var(--font-size-2xl); font-weight: 700; color: var(--accent-danger);">{importResult.errors.length}</div>
+            <div class="text-sm text-muted">❌ Errores</div>
+          </div>
+        </div>
+
+        {#if importResult.errors.length > 0}
+          <div style="max-height: 200px; overflow-y: auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fila</th>
+                  <th>Error</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each importResult.errors as err}
+                  <tr>
+                    <td style="font-weight: 600;">{err.row}</td>
+                    <td class="text-muted">{err.message}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        {/if}
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick={() => showImportResult = false}>Cerrar</button>
       </div>
     </div>
   </div>

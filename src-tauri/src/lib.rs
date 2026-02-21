@@ -10,6 +10,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // Initialize database in app data directory
             let app_data_dir = app.path().app_data_dir()
@@ -59,6 +60,9 @@ pub fn run() {
             commands::settings::delete_category,
             // Receipts
             commands::receipts::save_receipt_html,
+            // Import/Export
+            commands::import_export::export_products_csv,
+            commands::import_export::import_products_csv,
         ])
         .run(tauri::generate_context!())
         .expect("error while running AyniPOS");

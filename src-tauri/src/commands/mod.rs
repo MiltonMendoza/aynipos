@@ -6,3 +6,4 @@ pub mod cash_register;
 pub mod dashboard;
 pub mod settings;
 pub mod receipts;
+pub mod import_export;
