@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getDashboardStats, getSales, getTopSellingProducts, getSalesChartData, getProfitMarginReport, getInventoryReport } from '$lib/services/api';
+  import { getDashboardStats, getSales, getTopSellingProducts, getSalesChartData, getProfitMarginReport, getInventoryReport, saveReportCsv, saveReportHtml } from '$lib/services/api';
   import type { DashboardStats, Sale, TopSellingProduct, SalesChartDataPoint, ProfitMarginProduct, InventoryReportItem } from '$lib/types';
+  import { save } from '@tauri-apps/plugin-dialog';
+  import { openPath } from '@tauri-apps/plugin-opener';
 
   let stats: DashboardStats = $state({
     total_sales_today: 0, total_transactions_today: 0, total_products: 0,
@@ -315,6 +317,240 @@
     if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
     return n.toFixed(0);
   }
+
+  // ─── Export helpers ─────────────────────────────────────
+  let exporting = $state(false);
+
+  function todayStr(): string {
+    return new Date().toISOString().split('T')[0];
+  }
+
+  async function doExportCsv(filename: string, content: string) {
+    const filePath = await save({
+      defaultPath: filename,
+      filters: [{ name: 'CSV', extensions: ['csv'] }],
+    });
+    if (!filePath) return;
+    await saveReportCsv(content, filePath);
+  }
+
+  async function doExportPdf(title: string, bodyHtml: string) {
+    const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>${title} — AyniPOS</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 12px; color: #000; background: #f5f5f5; padding: 20px; }
+    .report { max-width: 900px; margin: 0 auto; background: #fff; padding: 24px; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+    h1 { font-size: 20px; margin-bottom: 4px; }
+    .subtitle { font-size: 12px; color: #666; margin-bottom: 16px; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+    th { background: #f8f9fa; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; text-align: left; padding: 8px 6px; border-bottom: 2px solid #dee2e6; }
+    th.num { text-align: right; }
+    td { padding: 6px; border-bottom: 1px solid #eee; font-size: 11px; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    td.bold { font-weight: 700; }
+    tfoot td { border-top: 2px solid #000; font-weight: 700; }
+    .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+    .summary-card { background: #f8f9fa; border-radius: 6px; padding: 12px; text-align: center; }
+    .summary-card .value { font-size: 18px; font-weight: 700; }
+    .summary-card .label { font-size: 10px; color: #666; margin-top: 2px; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+    .badge-success { background: #d1fae5; color: #065f46; }
+    .badge-warning { background: #fef3c7; color: #92400e; }
+    .badge-danger { background: #fee2e2; color: #991b1b; }
+    .print-actions { text-align: center; margin: 20px auto; max-width: 900px; }
+    .print-actions button { background: #3b82f6; color: #fff; border: none; padding: 12px 32px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; }
+    .print-actions button:hover { background: #2563eb; }
+    .print-actions .hint { font-size: 12px; color: #888; margin-top: 8px; }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .report { box-shadow: none; border-radius: 0; padding: 0; }
+      .print-actions { display: none !important; }
+      @page { margin: 10mm; }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-actions">
+    <button onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+    <div class="hint">Ctrl+P / Cmd+P → Guardar como PDF</div>
+  </div>
+  <div class="report">
+    <h1>${title}</h1>
+    <div class="subtitle">Generado el ${new Date().toLocaleDateString('es-BO', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })} — AyniPOS</div>
+    ${bodyHtml}
+  </div>
+</body>
+</html>`;
+    const filePath = await saveReportHtml(html);
+    await openPath(filePath);
+  }
+
+  // ─── CSV export functions ──────────────────────────────
+
+  async function exportChartCsv() {
+    if (chartData.length === 0) return;
+    exporting = true;
+    try {
+      const rows = ['Período,Ventas (Bs),Transacciones'];
+      for (const d of chartData) {
+        rows.push(`"${d.label}",${d.total_sales.toFixed(2)},${d.transaction_count}`);
+      }
+      rows.push(`"TOTAL",${chartTotal().toFixed(2)},${chartTotalTransactions()}`);
+      await doExportCsv(`ventas_${chartGroupBy}_${todayStr()}.csv`, rows.join('\n'));
+    } catch { /* ignore cancel */ }
+    exporting = false;
+  }
+
+  async function exportTopProductsCsv() {
+    const data = sortedProducts();
+    if (data.length === 0) return;
+    exporting = true;
+    try {
+      const rows = ['Ranking,Producto,Cantidad,Ingresos (Bs)'];
+      data.forEach((p, i) => {
+        rows.push(`${i + 1},"${p.product_name}",${p.total_quantity.toFixed(0)},${p.total_revenue.toFixed(2)}`);
+      });
+      await doExportCsv(`productos_top_${todayStr()}.csv`, rows.join('\n'));
+    } catch { /* ignore cancel */ }
+    exporting = false;
+  }
+
+  async function exportMarginCsv() {
+    const data = sortedMarginProducts();
+    if (data.length === 0) return;
+    exporting = true;
+    try {
+      const rows = ['Producto,P. Compra,P. Venta Prom.,Cantidad,Ingresos,Costo,Utilidad,Margen %'];
+      for (const p of data) {
+        rows.push(`"${p.product_name}",${p.purchase_price.toFixed(2)},${p.avg_sale_price.toFixed(2)},${p.total_quantity.toFixed(0)},${p.total_revenue.toFixed(2)},${p.total_cost.toFixed(2)},${p.gross_profit.toFixed(2)},${p.margin_percent.toFixed(1)}`);
+      }
+      rows.push(`"TOTAL",,,,${marginTotalRevenue().toFixed(2)},${marginTotalCost().toFixed(2)},${marginTotalProfit().toFixed(2)},${marginAvgPercent().toFixed(1)}`);
+      await doExportCsv(`margen_ganancia_${todayStr()}.csv`, rows.join('\n'));
+    } catch { /* ignore cancel */ }
+    exporting = false;
+  }
+
+  async function exportInventoryCsv() {
+    const data = sortedInvItems();
+    if (data.length === 0) return;
+    exporting = true;
+    try {
+      const rows = ['Producto,SKU,Categoría,Stock,P. Compra,P. Venta,Valor Costo,Valor Venta,Días sin mov.'];
+      for (const p of data) {
+        rows.push(`"${p.product_name}","${p.sku}","${p.category_name || ''}",${p.current_stock.toFixed(0)},${p.purchase_price.toFixed(2)},${p.sale_price.toFixed(2)},${p.stock_cost_value.toFixed(2)},${p.stock_sale_value.toFixed(2)},${p.days_without_movement ?? 'N/A'}`);
+      }
+      rows.push(`"TOTAL",,,,,,${invTotalCostValue().toFixed(2)},${invTotalSaleValue().toFixed(2)},`);
+      await doExportCsv(`inventario_${todayStr()}.csv`, rows.join('\n'));
+    } catch { /* ignore cancel */ }
+    exporting = false;
+  }
+
+  // ─── PDF export functions ──────────────────────────────
+
+  async function exportChartPdf() {
+    if (chartData.length === 0) return;
+    exporting = true;
+    try {
+      const summaryHtml = `
+        <div class="summary-grid">
+          <div class="summary-card"><div class="value">${fmt(chartTotal())}</div><div class="label">Total período</div></div>
+          <div class="summary-card"><div class="value">${fmt(chartAvg())}</div><div class="label">Promedio</div></div>
+          <div class="summary-card"><div class="value">${chartTotalTransactions()}</div><div class="label">Transacciones</div></div>
+          <div class="summary-card"><div class="value">${chartBestLabel()}</div><div class="label">Mejor período</div></div>
+        </div>`;
+      const tableRows = chartData.map(d =>
+        `<tr><td>${formatChartLabel(d.label)}</td><td class="num">${fmt(d.total_sales)}</td><td class="num">${d.transaction_count}</td></tr>`
+      ).join('');
+      const body = `${summaryHtml}
+        <table>
+          <thead><tr><th>Período</th><th class="num">Ventas</th><th class="num">Transacciones</th></tr></thead>
+          <tbody>${tableRows}</tbody>
+          <tfoot><tr><td class="bold">Total</td><td class="num">${fmt(chartTotal())}</td><td class="num">${chartTotalTransactions()}</td></tr></tfoot>
+        </table>`;
+      await doExportPdf('📈 Gráfico de Ventas', body);
+    } catch { /* ignore */ }
+    exporting = false;
+  }
+
+  async function exportTopProductsPdf() {
+    const data = sortedProducts();
+    if (data.length === 0) return;
+    exporting = true;
+    try {
+      const tableRows = data.map((p, i) =>
+        `<tr><td class="bold">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1)}</td><td>${p.product_name}</td><td class="num">${p.total_quantity.toFixed(0)}</td><td class="num">${fmt(p.total_revenue)}</td></tr>`
+      ).join('');
+      const body = `
+        <table>
+          <thead><tr><th>#</th><th>Producto</th><th class="num">Cantidad</th><th class="num">Ingresos</th></tr></thead>
+          <tbody>${tableRows}</tbody>
+        </table>`;
+      await doExportPdf('🏆 Productos Más Vendidos', body);
+    } catch { /* ignore */ }
+    exporting = false;
+  }
+
+  async function exportMarginPdf() {
+    const data = sortedMarginProducts();
+    if (data.length === 0) return;
+    exporting = true;
+    try {
+      const summaryHtml = `
+        <div class="summary-grid">
+          <div class="summary-card"><div class="value">${fmt(marginTotalRevenue())}</div><div class="label">Ingresos</div></div>
+          <div class="summary-card"><div class="value">${fmt(marginTotalCost())}</div><div class="label">Costo</div></div>
+          <div class="summary-card"><div class="value">${fmt(marginTotalProfit())}</div><div class="label">Utilidad bruta</div></div>
+          <div class="summary-card"><div class="value">${marginAvgPercent().toFixed(1)}%</div><div class="label">Margen promedio</div></div>
+        </div>`;
+      const badgeClass = (pct: number) => pct >= 30 ? 'badge-success' : pct >= 15 ? 'badge-warning' : 'badge-danger';
+      const tableRows = data.map(p =>
+        `<tr><td class="bold">${p.product_name}</td><td class="num">${fmt(p.purchase_price)}</td><td class="num">${fmt(p.avg_sale_price)}</td><td class="num">${p.total_quantity.toFixed(0)}</td><td class="num">${fmt(p.total_revenue)}</td><td class="num">${fmt(p.total_cost)}</td><td class="num bold">${fmt(p.gross_profit)}</td><td class="num"><span class="badge ${badgeClass(p.margin_percent)}">${p.margin_percent.toFixed(1)}%</span></td></tr>`
+      ).join('');
+      const body = `${summaryHtml}
+        <table>
+          <thead><tr><th>Producto</th><th class="num">P. Compra</th><th class="num">P. Venta</th><th class="num">Uds</th><th class="num">Ingresos</th><th class="num">Costo</th><th class="num">Utilidad</th><th class="num">Margen</th></tr></thead>
+          <tbody>${tableRows}</tbody>
+          <tfoot><tr><td class="bold">Total</td><td></td><td></td><td></td><td class="num">${fmt(marginTotalRevenue())}</td><td class="num">${fmt(marginTotalCost())}</td><td class="num">${fmt(marginTotalProfit())}</td><td class="num"><span class="badge ${badgeClass(marginAvgPercent())}">${marginAvgPercent().toFixed(1)}%</span></td></tr></tfoot>
+        </table>`;
+      await doExportPdf('💰 Margen de Ganancia', body);
+    } catch { /* ignore */ }
+    exporting = false;
+  }
+
+  async function exportInventoryPdf() {
+    const data = sortedInvItems();
+    if (data.length === 0) return;
+    exporting = true;
+    try {
+      const summaryHtml = `
+        <div class="summary-grid">
+          <div class="summary-card"><div class="value">${data.length}</div><div class="label">Productos</div></div>
+          <div class="summary-card"><div class="value">${fmt(invTotalCostValue())}</div><div class="label">Valor a costo</div></div>
+          <div class="summary-card"><div class="value">${fmt(invTotalSaleValue())}</div><div class="label">Valor a venta</div></div>
+          <div class="summary-card"><div class="value">${invInactiveCount()}</div><div class="label">Sin mov. 30+ d</div></div>
+        </div>`;
+      const daysBadge = (d: number | null) => {
+        if (d === null) return '<span class="badge">Sin mov.</span>';
+        const cls = d >= 90 ? 'badge-danger' : d >= 30 ? 'badge-warning' : 'badge-success';
+        return `<span class="badge ${cls}">${d}d</span>`;
+      };
+      const tableRows = data.map(p =>
+        `<tr><td class="bold">${p.product_name}</td><td>${p.sku}</td><td>${p.category_name || '—'}</td><td class="num">${p.current_stock.toFixed(0)}</td><td class="num">${fmt(p.purchase_price)}</td><td class="num">${fmt(p.sale_price)}</td><td class="num bold">${fmt(p.stock_cost_value)}</td><td class="num bold">${fmt(p.stock_sale_value)}</td><td class="num">${daysBadge(p.days_without_movement)}</td></tr>`
+      ).join('');
+      const body = `${summaryHtml}
+        <table>
+          <thead><tr><th>Producto</th><th>SKU</th><th>Categoría</th><th class="num">Stock</th><th class="num">P. Compra</th><th class="num">P. Venta</th><th class="num">V. Costo</th><th class="num">V. Venta</th><th class="num">Inactividad</th></tr></thead>
+          <tbody>${tableRows}</tbody>
+          <tfoot><tr><td class="bold">Total</td><td></td><td></td><td class="num">${invTotalStock().toFixed(0)}</td><td></td><td></td><td class="num">${fmt(invTotalCostValue())}</td><td class="num">${fmt(invTotalSaleValue())}</td><td></td></tr></tfoot>
+        </table>`;
+      await doExportPdf('📦 Reporte de Inventario', body);
+    } catch { /* ignore */ }
+    exporting = false;
+  }
 </script>
 
 <div class="page">
@@ -342,6 +578,12 @@
           <button class="btn btn-sm {chartGroupBy === 'week' ? 'btn-primary' : 'btn-ghost'}" onclick={() => chartGroupBy = 'week'}>Semanal</button>
           <button class="btn btn-sm {chartGroupBy === 'month' ? 'btn-primary' : 'btn-ghost'}" onclick={() => chartGroupBy = 'month'}>Mensual</button>
         </div>
+        {#if chartData.length > 0}
+          <div class="export-btns">
+            <button class="btn btn-sm btn-ghost" onclick={exportChartCsv} disabled={exporting} title="Exportar a CSV">📥 CSV</button>
+            <button class="btn btn-sm btn-ghost" onclick={exportChartPdf} disabled={exporting} title="Exportar a PDF">📄 PDF</button>
+          </div>
+        {/if}
       </div>
     </div>
 
@@ -506,6 +748,12 @@
           <option value={10}>Top 10</option>
           <option value={20}>Top 20</option>
         </select>
+        {#if topProducts.length > 0}
+          <div class="export-btns">
+            <button class="btn btn-sm btn-ghost" onclick={exportTopProductsCsv} disabled={exporting} title="Exportar a CSV">📥 CSV</button>
+            <button class="btn btn-sm btn-ghost" onclick={exportTopProductsPdf} disabled={exporting} title="Exportar a PDF">📄 PDF</button>
+          </div>
+        {/if}
       </div>
     </div>
 
@@ -574,6 +822,12 @@
   <div class="card" style="margin-bottom: var(--space-2xl);">
     <div class="top-header">
       <h3 style="font-weight: 700;">💰 Margen de Ganancia</h3>
+      {#if marginProducts.length > 0}
+        <div class="export-btns">
+          <button class="btn btn-sm btn-ghost" onclick={exportMarginCsv} disabled={exporting} title="Exportar a CSV">📥 CSV</button>
+          <button class="btn btn-sm btn-ghost" onclick={exportMarginPdf} disabled={exporting} title="Exportar a PDF">📄 PDF</button>
+        </div>
+      {/if}
     </div>
 
     <div class="period-bar">
@@ -707,6 +961,12 @@
           <option value="60">Sin movimiento 60+ días</option>
           <option value="90">Sin movimiento 90+ días</option>
         </select>
+        {#if invItems.length > 0}
+          <div class="export-btns">
+            <button class="btn btn-sm btn-ghost" onclick={exportInventoryCsv} disabled={exporting} title="Exportar a CSV">📥 CSV</button>
+            <button class="btn btn-sm btn-ghost" onclick={exportInventoryPdf} disabled={exporting} title="Exportar a PDF">📄 PDF</button>
+          </div>
+        {/if}
       </div>
     </div>
 
@@ -1065,5 +1325,11 @@
   }
   .text-right {
     text-align: right;
+  }
+
+  /* ─── Export buttons ──────────────────────────────────── */
+  .export-btns {
+    display: flex;
+    gap: 4px;
   }
 </style>

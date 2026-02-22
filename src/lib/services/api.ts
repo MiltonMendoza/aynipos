@@ -180,3 +180,13 @@ export async function deleteCategory(id: string): Promise<void> {
 export async function saveReceiptHtml(html: string): Promise<string> {
   return invoke('save_receipt_html', { html });
 }
+
+// ─── Reports Export ────────────────────────────────────
+
+export async function saveReportCsv(content: string, filePath: string): Promise<void> {
+  return invoke('save_report_csv', { content, filePath });
+}
+
+export async function saveReportHtml(html: string): Promise<string> {
+  return invoke('save_report_html', { html });
+}

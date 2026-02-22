@@ -76,7 +76,7 @@
 | 3.4 | **Gráficos de ventas** | Charts de ventas diarias/semanales/mensuales con barras y líneas de tendencia. | ✅ Completado |
 | 3.5 | **Margen de ganancia** | Reporte comparando precio de compra vs precio de venta. Utilidad bruta por producto y global. | ✅ Completado |
 | 3.6 | **Reporte de inventario** | Valorización del stock actual (costo y venta), productos sin movimiento en X días. | ✅ Completado |
-| 3.7 | **Exportar a Excel/PDF** | Botón para descargar cualquier reporte en formato Excel (.xlsx) o PDF. | ⬜ Pendiente |
+| 3.7 | **Exportar a Excel/PDF** | Botón para descargar cualquier reporte en formato Excel (.xlsx) o PDF. | ✅ Completado |
 
 ### Criterios de completitud Fase 3:
 - [ ] El dueño puede ver cuánto vendió en cualquier período
