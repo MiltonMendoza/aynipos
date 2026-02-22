@@ -74,7 +74,7 @@
 | 3.2 | **Reporte de cierre de caja** | PDF con resumen: ventas por método de pago (efectivo/tarjeta/QR), totales, cantidad de transacciones, diferencias. | ✅ Completado |
 | 3.3 | **Productos más vendidos** | Top 10/20 productos por cantidad vendida y por monto generado, con filtro de período. | ✅ Completado |
 | 3.4 | **Gráficos de ventas** | Charts de ventas diarias/semanales/mensuales con barras y líneas de tendencia. | ✅ Completado |
-| 3.5 | **Margen de ganancia** | Reporte comparando precio de compra vs precio de venta. Utilidad bruta por producto y global. | ⬜ Pendiente |
+| 3.5 | **Margen de ganancia** | Reporte comparando precio de compra vs precio de venta. Utilidad bruta por producto y global. | ✅ Completado |
 | 3.6 | **Reporte de inventario** | Valorización del stock actual (costo y venta), productos sin movimiento en X días. | ⬜ Pendiente |
 | 3.7 | **Exportar a Excel/PDF** | Botón para descargar cualquier reporte en formato Excel (.xlsx) o PDF. | ⬜ Pendiente |
 

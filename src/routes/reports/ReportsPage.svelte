@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getDashboardStats, getSales, getTopSellingProducts, getSalesChartData } from '$lib/services/api';
-  import type { DashboardStats, Sale, TopSellingProduct, SalesChartDataPoint } from '$lib/types';
+  import { getDashboardStats, getSales, getTopSellingProducts, getSalesChartData, getProfitMarginReport } from '$lib/services/api';
+  import type { DashboardStats, Sale, TopSellingProduct, SalesChartDataPoint, ProfitMarginProduct } from '$lib/types';
 
   let stats: DashboardStats = $state({
     total_sales_today: 0, total_transactions_today: 0, total_products: 0,
@@ -28,6 +28,15 @@
   let chartCustomFrom = $state('');
   let chartCustomTo = $state('');
   let hoveredBar: number | null = $state(null);
+
+  // ─── Profit Margin ──────────────────────────────────────
+  let marginProducts: ProfitMarginProduct[] = $state([]);
+  let marginLoading = $state(false);
+  let marginPeriod: PeriodPreset = $state('month');
+  let marginCustomFrom = $state('');
+  let marginCustomTo = $state('');
+  let marginSortCol: 'product_name' | 'purchase_price' | 'avg_sale_price' | 'total_quantity' | 'total_revenue' | 'total_cost' | 'gross_profit' | 'margin_percent' = $state('gross_profit');
+  let marginSortAsc = $state(false);
 
   // ─── Chart constants ───────────────────────────────────
   const CHART_W = 800;
@@ -90,6 +99,55 @@
     chartPeriod; chartGroupBy; chartCustomFrom; chartCustomTo;
     loadChartData();
   });
+
+  async function loadMarginData() {
+    marginLoading = true;
+    try {
+      const { from, to } = getDateRange(marginPeriod, marginCustomFrom, marginCustomTo);
+      marginProducts = await getProfitMarginReport(from, to);
+    } catch { marginProducts = []; }
+    marginLoading = false;
+  }
+
+  $effect(() => {
+    marginPeriod; marginCustomFrom; marginCustomTo;
+    loadMarginData();
+  });
+
+  function sortedMarginProducts(): ProfitMarginProduct[] {
+    return [...marginProducts].sort((a, b) => {
+      const va = a[marginSortCol];
+      const vb = b[marginSortCol];
+      if (typeof va === 'string') return marginSortAsc ? (va as string).localeCompare(vb as string) : (vb as string).localeCompare(va as string);
+      return marginSortAsc ? (va as number) - (vb as number) : (vb as number) - (va as number);
+    });
+  }
+
+  function toggleMarginSort(col: typeof marginSortCol) {
+    if (marginSortCol === col) marginSortAsc = !marginSortAsc;
+    else { marginSortCol = col; marginSortAsc = false; }
+  }
+
+  function marginTotalRevenue() { return marginProducts.reduce((s, p) => s + p.total_revenue, 0); }
+  function marginTotalCost() { return marginProducts.reduce((s, p) => s + p.total_cost, 0); }
+  function marginTotalProfit() { return marginProducts.reduce((s, p) => s + p.gross_profit, 0); }
+  function marginAvgPercent() {
+    const cost = marginTotalCost();
+    if (cost === 0) return 0;
+    return (marginTotalProfit() / cost) * 100;
+  }
+
+  function marginColor(pct: number): string {
+    if (pct >= 30) return 'var(--accent-success)';
+    if (pct >= 15) return 'var(--accent-warning)';
+    return 'var(--accent-danger)';
+  }
+
+  function marginBadgeClass(pct: number): string {
+    if (pct >= 30) return 'badge-success';
+    if (pct >= 15) return 'badge-warning';
+    return 'badge-danger';
+  }
 
   function sortedProducts(): TopSellingProduct[] {
     return [...topProducts].sort((a, b) =>
@@ -462,6 +520,129 @@
     {/if}
   </div>
 
+  <!-- ─── Profit Margin ──────────────────────────────────── -->
+  <div class="card" style="margin-bottom: var(--space-2xl);">
+    <div class="top-header">
+      <h3 style="font-weight: 700;">💰 Margen de Ganancia</h3>
+    </div>
+
+    <div class="period-bar">
+      <div class="period-presets">
+        {#each [
+          { key: 'today', label: 'Hoy' },
+          { key: 'week', label: 'Esta semana' },
+          { key: 'month', label: 'Este mes' },
+          { key: 'last_month', label: 'Mes anterior' },
+          { key: 'all', label: 'Todo' },
+          { key: 'custom', label: 'Personalizado' },
+        ] as preset}
+          <button
+            class="btn btn-sm {marginPeriod === preset.key ? 'btn-primary' : 'btn-ghost'}"
+            onclick={() => marginPeriod = preset.key as PeriodPreset}
+          >{preset.label}</button>
+        {/each}
+      </div>
+      {#if marginPeriod === 'custom'}
+        <div class="custom-dates">
+          <input type="date" class="input input-sm" bind:value={marginCustomFrom} />
+          <span style="color: var(--text-muted);">—</span>
+          <input type="date" class="input input-sm" bind:value={marginCustomTo} />
+        </div>
+      {/if}
+    </div>
+
+    {#if marginLoading}
+      <div class="top-empty">
+        <span class="text-muted">Cargando...</span>
+      </div>
+    {:else if marginProducts.length === 0}
+      <div class="top-empty">
+        <span style="font-size: 2rem;">📦</span>
+        <span class="text-muted">No hay datos de ventas para este período</span>
+      </div>
+    {:else}
+      <!-- Summary cards -->
+      <div class="card-grid card-grid-4" style="margin-bottom: var(--space-lg);">
+        <div class="stat-card">
+          <div class="stat-icon blue">💵</div>
+          <div class="stat-content">
+            <div class="stat-value">{fmt(marginTotalRevenue())}</div>
+            <div class="stat-label">Ingresos</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon red">📦</div>
+          <div class="stat-content">
+            <div class="stat-value">{fmt(marginTotalCost())}</div>
+            <div class="stat-label">Costo</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon green">📈</div>
+          <div class="stat-content">
+            <div class="stat-value">{fmt(marginTotalProfit())}</div>
+            <div class="stat-label">Utilidad bruta</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background: {marginColor(marginAvgPercent())}22; color: {marginColor(marginAvgPercent())};">%</div>
+          <div class="stat-content">
+            <div class="stat-value" style="color: {marginColor(marginAvgPercent())};">{marginAvgPercent().toFixed(1)}%</div>
+            <div class="stat-label">Margen promedio</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="table-container" style="border: none;">
+        <table>
+          <thead>
+            <tr>
+              <th class="sortable-th" onclick={() => toggleMarginSort('product_name')}>Producto {marginSortCol === 'product_name' ? (marginSortAsc ? '↑' : '↓') : ''}</th>
+              <th class="sortable-th text-right" onclick={() => toggleMarginSort('purchase_price')}>P. Compra {marginSortCol === 'purchase_price' ? (marginSortAsc ? '↑' : '↓') : ''}</th>
+              <th class="sortable-th text-right" onclick={() => toggleMarginSort('avg_sale_price')}>P. Venta Prom. {marginSortCol === 'avg_sale_price' ? (marginSortAsc ? '↑' : '↓') : ''}</th>
+              <th class="sortable-th text-right" onclick={() => toggleMarginSort('total_quantity')}>Uds {marginSortCol === 'total_quantity' ? (marginSortAsc ? '↑' : '↓') : ''}</th>
+              <th class="sortable-th text-right" onclick={() => toggleMarginSort('total_revenue')}>Ingresos {marginSortCol === 'total_revenue' ? (marginSortAsc ? '↑' : '↓') : ''}</th>
+              <th class="sortable-th text-right" onclick={() => toggleMarginSort('total_cost')}>Costo {marginSortCol === 'total_cost' ? (marginSortAsc ? '↑' : '↓') : ''}</th>
+              <th class="sortable-th text-right" onclick={() => toggleMarginSort('gross_profit')}>Utilidad {marginSortCol === 'gross_profit' ? (marginSortAsc ? '↑' : '↓') : ''}</th>
+              <th class="sortable-th text-right" onclick={() => toggleMarginSort('margin_percent')}>Margen % {marginSortCol === 'margin_percent' ? (marginSortAsc ? '↑' : '↓') : ''}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each sortedMarginProducts() as p}
+              <tr>
+                <td style="font-weight: 600;">{p.product_name}</td>
+                <td class="text-right">{fmt(p.purchase_price)}</td>
+                <td class="text-right">{fmt(p.avg_sale_price)}</td>
+                <td class="text-right">{p.total_quantity.toFixed(0)}</td>
+                <td class="text-right" style="font-weight: 600;">{fmt(p.total_revenue)}</td>
+                <td class="text-right">{fmt(p.total_cost)}</td>
+                <td class="text-right" style="font-weight: 700; color: {marginColor(p.margin_percent)};">{fmt(p.gross_profit)}</td>
+                <td class="text-right">
+                  <span class="badge {marginBadgeClass(p.margin_percent)}">{p.margin_percent.toFixed(1)}%</span>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+          <tfoot>
+            <tr style="font-weight: 700; border-top: 2px solid var(--border-primary);">
+              <td>Total</td>
+              <td></td>
+              <td></td>
+              <td></td>
+              <td class="text-right">{fmt(marginTotalRevenue())}</td>
+              <td class="text-right">{fmt(marginTotalCost())}</td>
+              <td class="text-right" style="color: {marginColor(marginAvgPercent())};">{fmt(marginTotalProfit())}</td>
+              <td class="text-right">
+                <span class="badge {marginBadgeClass(marginAvgPercent())}">{marginAvgPercent().toFixed(1)}%</span>
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    {/if}
+  </div>
+
   <div class="card">
     <h3 style="font-weight: 700; margin-bottom: var(--space-lg);">Últimas Ventas</h3>
     <div class="table-container" style="border: none;">
@@ -706,5 +887,19 @@
   .top-secondary {
     font-size: var(--font-size-xs);
     color: var(--text-muted);
+  }
+
+  /* ─── Margin table ────────────────────────────────────── */
+  .sortable-th {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    transition: color 0.15s;
+  }
+  .sortable-th:hover {
+    color: var(--accent-primary);
+  }
+  .text-right {
+    text-align: right;
   }
 </style>

@@ -146,3 +146,60 @@ pub fn get_sales_chart_data(
 
     Ok(points)
 }
+
+#[tauri::command]
+pub fn get_profit_margin_report(
+    db: State<'_, Database>,
+    date_from: Option<String>,
+    date_to: Option<String>,
+) -> Result<Vec<ProfitMarginProduct>, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT si.product_id,
+                    si.product_name,
+                    p.purchase_price,
+                    SUM(si.unit_price * si.quantity) / SUM(si.quantity) as avg_sale_price,
+                    SUM(si.quantity) as total_quantity,
+                    SUM(si.total) as total_revenue,
+                    SUM(p.purchase_price * si.quantity) as total_cost,
+                    SUM(si.total) - SUM(p.purchase_price * si.quantity) as gross_profit,
+                    CASE WHEN SUM(p.purchase_price * si.quantity) > 0
+                         THEN ((SUM(si.total) - SUM(p.purchase_price * si.quantity)) / SUM(p.purchase_price * si.quantity)) * 100
+                         ELSE 0
+                    END as margin_percent
+             FROM sale_items si
+             JOIN sales s ON s.id = si.sale_id
+             JOIN products p ON p.id = si.product_id
+             WHERE s.status = 'completed'
+               AND (?1 IS NULL OR DATE(s.created_at) >= ?1)
+               AND (?2 IS NULL OR DATE(s.created_at) <= ?2)
+             GROUP BY si.product_id, si.product_name, p.purchase_price
+             ORDER BY gross_profit DESC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map(rusqlite::params![date_from, date_to], |row| {
+            Ok(ProfitMarginProduct {
+                product_id: row.get(0)?,
+                product_name: row.get(1)?,
+                purchase_price: row.get(2)?,
+                avg_sale_price: row.get(3)?,
+                total_quantity: row.get(4)?,
+                total_revenue: row.get(5)?,
+                total_cost: row.get(6)?,
+                gross_profit: row.get(7)?,
+                margin_percent: row.get(8)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut products = Vec::new();
+    for row in rows {
+        products.push(row.map_err(|e| e.to_string())?);
+    }
+
+    Ok(products)
+}

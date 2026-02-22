@@ -283,3 +283,16 @@ pub struct SalesChartDataPoint {
     pub total_sales: f64,
     pub transaction_count: i64,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProfitMarginProduct {
+    pub product_id: String,
+    pub product_name: String,
+    pub purchase_price: f64,
+    pub avg_sale_price: f64,
+    pub total_quantity: f64,
+    pub total_revenue: f64,
+    pub total_cost: f64,
+    pub gross_profit: f64,
+    pub margin_percent: f64,
+}

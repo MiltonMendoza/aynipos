@@ -225,6 +225,18 @@ export interface SalesChartDataPoint {
   transaction_count: number;
 }
 
+export interface ProfitMarginProduct {
+  product_id: string;
+  product_name: string;
+  purchase_price: number;
+  avg_sale_price: number;
+  total_quantity: number;
+  total_revenue: number;
+  total_cost: number;
+  gross_profit: number;
+  margin_percent: number;
+}
+
 // ─── Settings ──────────────────────────────────────────
 
 export interface Setting {
