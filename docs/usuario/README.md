@@ -12,7 +12,7 @@
 |---|---------|-------------|---------------|
 | 1.1 | ⌨️ Atajos de teclado | Usa el teclado para trabajar más rápido en caja | _Próximamente_ |
 | 1.2 | 📡 Lector de código de barras | Escanea productos para agregarlos al carrito | [Ver guía](1_2_lector_codigo_barras.md) |
-| 1.3 | 💰 Descuentos | Aplica descuentos por producto o al total de la venta | _Próximamente_ |
+| 1.3 | 💰 Descuentos | Aplica descuentos por producto o al total de la venta | [Ver guía](1_3_descuentos.md) |
 | 1.4 | 👤 Cliente en la venta | Asocia un cliente (NIT/CI) a cada venta | _Próximamente_ |
 | 1.5 | 📝 Notas en la venta | Agrega observaciones a la venta | _Próximamente_ |
 | 1.6 | 🖨️ Impresión de recibo | Imprime un comprobante después de cada venta | _Próximamente_ |
