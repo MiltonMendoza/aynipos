@@ -10,20 +10,90 @@
   let loading = $state(true);
   let businessInfo: BusinessInfo = $state({ name: 'Mi Negocio', nit: '', address: '', phone: '', city: '' });
 
+  // ─── Filtros ───────────────────────────────────────────
+  let dateFrom = $state('');
+  let dateTo = $state('');
+  let statusFilter = $state('');
+  let activePreset = $state('hoy');
+
+  // ─── Resumen ───────────────────────────────────────────
+  let summaryTotal = $derived(
+    sales.filter(s => s.status === 'completed').reduce((sum, s) => sum + s.total, 0)
+  );
+  let summaryCount = $derived(sales.length);
+  let summaryCompleted = $derived(sales.filter(s => s.status === 'completed').length);
+
   onMount(async () => {
     try {
       const allSettings = await getSettings();
       businessInfo = extractBusinessInfo(allSettings);
     } catch { /* ignore */ }
-    await loadSales();
+    applyPreset('hoy');
   });
+
+  function todayStr(): string {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function applyPreset(preset: string) {
+    activePreset = preset;
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = today.getMonth();
+    const dd = today.getDate();
+
+    switch (preset) {
+      case 'hoy':
+        dateFrom = todayStr();
+        dateTo = todayStr();
+        break;
+      case 'semana': {
+        const dayOfWeek = today.getDay(); // 0=Sun
+        const monday = new Date(today);
+        monday.setDate(dd - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+        dateFrom = monday.getFullYear() + '-' + String(monday.getMonth() + 1).padStart(2, '0') + '-' + String(monday.getDate()).padStart(2, '0');
+        dateTo = todayStr();
+        break;
+      }
+      case 'mes':
+        dateFrom = yyyy + '-' + String(mm + 1).padStart(2, '0') + '-01';
+        dateTo = todayStr();
+        break;
+      case '30dias': {
+        const past = new Date(today);
+        past.setDate(dd - 30);
+        dateFrom = past.getFullYear() + '-' + String(past.getMonth() + 1).padStart(2, '0') + '-' + String(past.getDate()).padStart(2, '0');
+        dateTo = todayStr();
+        break;
+      }
+      case 'todo':
+        dateFrom = '';
+        dateTo = '';
+        break;
+    }
+    loadSales();
+  }
 
   async function loadSales() {
     loading = true;
+    selectedSale = null;
     try {
-      sales = await getSales();
+      const from = dateFrom ? dateFrom + 'T00:00:00' : undefined;
+      const to = dateTo ? dateTo + 'T23:59:59' : undefined;
+      const st = statusFilter || undefined;
+      sales = await getSales(from, to, st);
     } catch { sales = []; }
     loading = false;
+  }
+
+  function onDateChange() {
+    activePreset = '';
+    loadSales();
+  }
+
+  function onStatusChange() {
+    loadSales();
   }
 
   async function viewSale(sale: Sale) {
@@ -67,9 +137,66 @@
     <button class="btn btn-ghost" onclick={loadSales}>🔄 Actualizar</button>
   </div>
 
-  <div style="display: flex; gap: var(--space-xl); height: calc(100vh - 140px);">
+  <!-- Barra de filtros -->
+  <div class="filters-bar">
+    <div class="filters-row">
+      <div class="filter-group">
+        <label class="filter-label">Desde</label>
+        <input type="date" class="input" bind:value={dateFrom} onchange={onDateChange} />
+      </div>
+      <div class="filter-group">
+        <label class="filter-label">Hasta</label>
+        <input type="date" class="input" bind:value={dateTo} onchange={onDateChange} />
+      </div>
+      <div class="filter-group">
+        <label class="filter-label">Estado</label>
+        <select class="select" bind:value={statusFilter} onchange={onStatusChange}>
+          <option value="">Todos</option>
+          <option value="completed">Completadas</option>
+          <option value="cancelled">Anuladas</option>
+        </select>
+      </div>
+      <div class="presets-group">
+        <button class="btn btn-sm {activePreset === 'hoy' ? 'btn-primary' : 'btn-ghost'}" onclick={() => applyPreset('hoy')}>Hoy</button>
+        <button class="btn btn-sm {activePreset === 'semana' ? 'btn-primary' : 'btn-ghost'}" onclick={() => applyPreset('semana')}>Esta semana</button>
+        <button class="btn btn-sm {activePreset === 'mes' ? 'btn-primary' : 'btn-ghost'}" onclick={() => applyPreset('mes')}>Este mes</button>
+        <button class="btn btn-sm {activePreset === '30dias' ? 'btn-primary' : 'btn-ghost'}" onclick={() => applyPreset('30dias')}>Últimos 30 días</button>
+        <button class="btn btn-sm {activePreset === 'todo' ? 'btn-primary' : 'btn-ghost'}" onclick={() => applyPreset('todo')}>Todo</button>
+      </div>
+    </div>
+
+    <!-- Resumen de ventas filtradas -->
+    <div class="summary-row">
+      <div class="summary-item">
+        <span class="summary-icon green">💰</span>
+        <div>
+          <div class="summary-value">{formatCurrency(summaryTotal)}</div>
+          <div class="summary-label">Total vendido</div>
+        </div>
+      </div>
+      <div class="summary-item">
+        <span class="summary-icon blue">🧾</span>
+        <div>
+          <div class="summary-value">{summaryCount}</div>
+          <div class="summary-label">Transacciones</div>
+        </div>
+      </div>
+      <div class="summary-item">
+        <span class="summary-icon purple">✅</span>
+        <div>
+          <div class="summary-value">{summaryCompleted}</div>
+          <div class="summary-label">Completadas</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: var(--space-xl); height: calc(100vh - 320px);">
     <!-- Sales list -->
     <div style="flex: 1; overflow-y: auto;" class="table-container">
+      {#if loading}
+        <div class="text-center text-muted" style="padding: var(--space-3xl);">Cargando ventas...</div>
+      {:else}
       <table>
         <thead>
           <tr>
@@ -83,7 +210,7 @@
         </thead>
         <tbody>
           {#if sales.length === 0}
-            <tr><td colspan="6" class="text-center text-muted" style="padding: var(--space-3xl);">No hay ventas registradas</td></tr>
+            <tr><td colspan="6" class="text-center text-muted" style="padding: var(--space-3xl);">No hay ventas en el período seleccionado</td></tr>
           {:else}
             {#each sales as sale}
               <tr
@@ -109,6 +236,7 @@
           {/if}
         </tbody>
       </table>
+      {/if}
     </div>
 
     <!-- Sale detail -->
@@ -207,3 +335,96 @@
     {/if}
   </div>
 </div>
+
+<style>
+  .filters-bar {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    margin-bottom: var(--space-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+  }
+
+  .filters-row {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-lg);
+    flex-wrap: wrap;
+  }
+
+  .filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+  }
+
+  .filter-label {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .filter-group .input,
+  .filter-group .select {
+    width: 160px;
+    height: 36px;
+    font-size: var(--font-size-sm);
+  }
+
+  .presets-group {
+    display: flex;
+    gap: var(--space-xs);
+    margin-left: auto;
+  }
+
+  .btn-sm {
+    padding: var(--space-xs) var(--space-md);
+    font-size: var(--font-size-xs);
+    height: 36px;
+  }
+
+  .summary-row {
+    display: flex;
+    gap: var(--space-xl);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--border-color);
+  }
+
+  .summary-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .summary-icon {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+  }
+
+  .summary-icon.green { background: rgba(16, 185, 129, 0.15); }
+  .summary-icon.blue { background: rgba(59, 130, 246, 0.15); }
+  .summary-icon.purple { background: rgba(139, 92, 246, 0.15); }
+
+  .summary-value {
+    font-size: var(--font-size-base);
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
+
+  .summary-label {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    line-height: 1.2;
+  }
+</style>

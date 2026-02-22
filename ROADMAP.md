@@ -70,7 +70,7 @@
 
 | # | Feature | Descripción | Estado |
 |---|---------|-------------|--------|
-| 3.1 | **Ventas por rango de fechas** | Filtro de fecha desde/hasta en historial de ventas. Selector de rango con presets (hoy, esta semana, este mes). | ⬜ Pendiente |
+| 3.1 | **Ventas por rango de fechas** | Filtro de fecha desde/hasta en historial de ventas. Selector de rango con presets (hoy, esta semana, este mes). | ✅ Completado |
 | 3.2 | **Reporte de cierre de caja** | PDF con resumen: ventas por método de pago (efectivo/tarjeta/QR), totales, cantidad de transacciones, diferencias. | ⬜ Pendiente |
 | 3.3 | **Productos más vendidos** | Top 10/20 productos por cantidad vendida y por monto generado, con filtro de período. | ⬜ Pendiente |
 | 3.4 | **Gráficos de ventas** | Charts de ventas diarias/semanales/mensuales con barras y líneas de tendencia. | ⬜ Pendiente |
