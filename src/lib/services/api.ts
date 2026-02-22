@@ -3,7 +3,7 @@ import type {
   ProductWithStock, CreateProduct, UpdateProduct,
   Customer, CreateCustomer,
   Sale, SaleItem, CreateSale,
-  CashRegister,
+  CashRegister, CashRegisterReport,
   InventoryMovement, InventoryLot,
   DashboardStats,
   Setting, Category, CreateCategory,
@@ -119,6 +119,10 @@ export async function closeCashRegister(closingAmount: number, notes?: string): 
 
 export async function getCurrentCashRegister(): Promise<CashRegister | null> {
   return invoke('get_current_cash_register');
+}
+
+export async function getCashRegisterReport(registerId: string): Promise<CashRegisterReport> {
+  return invoke('get_cash_register_report', { registerId });
 }
 
 // ─── Dashboard ─────────────────────────────────────────

@@ -205,6 +205,25 @@ pub struct CashRegister {
     pub user_id: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CashRegisterReport {
+    pub register: CashRegister,
+    pub total_sales: f64,
+    pub total_transactions: i64,
+    pub cancelled_transactions: i64,
+    pub total_discount: f64,
+    pub total_tax: f64,
+    pub sales_cash: f64,
+    pub sales_card: f64,
+    pub sales_qr: f64,
+    pub sales_mixed: f64,
+    pub count_cash: i64,
+    pub count_card: i64,
+    pub count_qr: i64,
+    pub count_mixed: i64,
+    pub difference: f64,
+}
+
 // ─── Settings ──────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

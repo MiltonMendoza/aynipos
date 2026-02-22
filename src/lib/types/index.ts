@@ -158,6 +158,24 @@ export interface CashRegister {
   user_id: string | null;
 }
 
+export interface CashRegisterReport {
+  register: CashRegister;
+  total_sales: number;
+  total_transactions: number;
+  cancelled_transactions: number;
+  total_discount: number;
+  total_tax: number;
+  sales_cash: number;
+  sales_card: number;
+  sales_qr: number;
+  sales_mixed: number;
+  count_cash: number;
+  count_card: number;
+  count_qr: number;
+  count_mixed: number;
+  difference: number;
+}
+
 // ─── Inventory ─────────────────────────────────────────
 
 export interface InventoryMovement {

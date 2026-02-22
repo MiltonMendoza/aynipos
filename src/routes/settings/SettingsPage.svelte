@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Setting, CashRegister } from '$lib/types';
-  import { getSettings, updateSetting, getCurrentCashRegister, openCashRegister, closeCashRegister } from '$lib/services/api';
+  import { getSettings, updateSetting, getCurrentCashRegister, openCashRegister, closeCashRegister, getCashRegisterReport } from '$lib/services/api';
+  import { extractBusinessInfo, type BusinessInfo } from '$lib/services/receipt';
+  import { printCashReport } from '$lib/services/cashReportPrint';
 
   let settings: Setting[] = $state([]);
   let cashRegister: CashRegister | null = $state(null);
@@ -10,6 +12,8 @@
   let openingAmount = $state(0);
   let closingAmount = $state(0);
   let closingNotes = $state('');
+  let lastClosedRegisterId: string | null = $state(null);
+  let businessInfo: BusinessInfo = $state({ name: '', nit: '', address: '', phone: '', city: '' });
 
   // Validation errors
   let openCashErrors: Record<string, string> = $state({});
@@ -29,6 +33,7 @@
     try {
       settings = await getSettings();
       cashRegister = await getCurrentCashRegister();
+      businessInfo = extractBusinessInfo(settings);
       for (const s of settings) {
         if (s.key === 'business_name') businessName = s.value;
         if (s.key === 'business_nit') businessNit = s.value;
@@ -79,9 +84,22 @@
       cashRegister = null;
       showCloseCash = false;
       closeCashErrors = {};
-      const diff = (result.closing_amount ?? 0) - (result.expected_amount ?? 0);
-      alert(`Caja cerrada.\nEsperado: Bs ${result.expected_amount?.toFixed(2)}\nReal: Bs ${result.closing_amount?.toFixed(2)}\nDiferencia: Bs ${diff.toFixed(2)}`);
+      lastClosedRegisterId = result.id;
+      // Refresh business info in case it was updated
+      businessInfo = extractBusinessInfo(settings);
+      // Generate and open closing report
+      const report = await getCashRegisterReport(result.id);
+      await printCashReport(report, businessInfo);
     } catch (e) { alert('Error: ' + e); }
+  }
+
+  async function handleReprintReport() {
+    if (!lastClosedRegisterId) return;
+    try {
+      businessInfo = extractBusinessInfo(settings);
+      const report = await getCashRegisterReport(lastClosedRegisterId);
+      await printCashReport(report, businessInfo);
+    } catch (e) { alert('Error al generar reporte: ' + e); }
   }
 
   function openCashModal() {
@@ -135,7 +153,12 @@
         <div style="background: var(--bg-tertiary); border-radius: var(--radius-lg); padding: var(--space-xl); text-align: center; margin-bottom: var(--space-lg);">
           <div class="badge badge-warning">● Caja Cerrada</div>
         </div>
-        <button class="btn btn-success btn-block" onclick={openCashModal}>🔓 Abrir Caja</button>
+        <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
+          <button class="btn btn-success btn-block" onclick={openCashModal}>🔓 Abrir Caja</button>
+          {#if lastClosedRegisterId}
+            <button class="btn btn-ghost btn-block" onclick={handleReprintReport}>📊 Ver último cierre</button>
+          {/if}
+        </div>
       {/if}
     </div>
   </div>
