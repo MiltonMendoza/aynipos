@@ -4,6 +4,9 @@
   import { getSettings, updateSetting, getCurrentCashRegister, openCashRegister, closeCashRegister, getCashRegisterReport, getUsers, createUser, updateUser, deleteUser } from '$lib/services/api';
   import { extractBusinessInfo, type BusinessInfo } from '$lib/services/receipt';
   import { printCashReport } from '$lib/services/cashReportPrint';
+  import { getRoleLabel, getRoleIcon, hasPermission } from '$lib/services/permissions';
+
+  let { currentUser }: { currentUser: User | null } = $props();
 
   let settings: Setting[] = $state([]);
   let cashRegister: CashRegister | null = $state(null);
@@ -207,8 +210,9 @@
     </div>
   </div>
 
-  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-xl); max-width: 900px;">
+  <div style="display: grid; grid-template-columns: {hasPermission(currentUser, 'manage_settings') ? '1fr 1fr' : '1fr'}; gap: var(--space-xl); max-width: 900px;">
     <!-- Business info -->
+    {#if hasPermission(currentUser, 'manage_settings')}
     <div class="card">
       <h3 style="font-weight: 700; margin-bottom: var(--space-lg);">🏪 Datos del Negocio</h3>
       <div style="display: flex; flex-direction: column; gap: var(--space-lg);">
@@ -222,6 +226,7 @@
         </button>
       </div>
     </div>
+    {/if}
 
     <!-- Cash Register -->
     <div class="card">
@@ -247,6 +252,7 @@
   </div>
 
   <!-- Users Management -->
+  {#if hasPermission(currentUser, 'manage_users')}
   <div style="max-width: 900px; margin-top: var(--space-xl);">
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
@@ -273,14 +279,14 @@
                   <td>
                     <div style="display: flex; align-items: center; gap: var(--space-sm);">
                       <span style="width: 28px; height: 28px; background: var(--bg-hover); border-radius: var(--radius-full); display: flex; align-items: center; justify-content: center; font-size: var(--font-size-xs);">
-                        {user.role === 'admin' ? '👑' : '👤'}
+                        {getRoleIcon(user.role)}
                       </span>
                       {user.name}
                     </div>
                   </td>
                   <td>
                     <span class="badge" class:badge-warning={user.role === 'admin'} class:badge-info={user.role !== 'admin'}>
-                      {user.role === 'admin' ? 'Administrador' : 'Cajero'}
+                      {getRoleLabel(user.role)}
                     </span>
                   </td>
                   <td class="text-muted text-sm">
@@ -300,6 +306,7 @@
       {/if}
     </div>
   </div>
+  {/if}
 </div>
 
 {#if showOpenCash}
@@ -371,6 +378,7 @@
             <label class="input-label">Rol</label>
             <select class="select" bind:value={userRole}>
               <option value="cashier">Cajero</option>
+              <option value="inventory">Inventarista</option>
               <option value="admin">Administrador</option>
             </select>
           </div>

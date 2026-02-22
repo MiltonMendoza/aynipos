@@ -1,6 +1,7 @@
 <script lang="ts">
   import '../app.css';
   import type { AppRoute, User } from '$lib/types';
+  import { canAccessRoute, getDefaultRoute, getRoleLabel, getRoleIcon } from '$lib/services/permissions';
 
   let { children } = $props();
 
@@ -18,6 +19,11 @@
     { route: 'settings', icon: '⚙️', label: 'Configuración' },
   ];
 
+  // Filter nav items by role permissions
+  let filteredNavItems = $derived(
+    navItems.filter(item => !currentUser || canAccessRoute(currentUser, item.route))
+  );
+
   function navigate(route: AppRoute) {
     currentRoute = route;
   }
@@ -31,6 +37,7 @@
 
   function handleLogin(user: User) {
     currentUser = user;
+    currentRoute = getDefaultRoute(user);
   }
 
   function handleLogout() {
@@ -43,7 +50,7 @@
     const sections: { label: string; items: typeof navItems }[] = [];
     let currentSection = { label: '', items: [] as typeof navItems };
 
-    for (const item of navItems) {
+    for (const item of filteredNavItems) {
       if (item.section) {
         if (currentSection.items.length > 0) {
           sections.push(currentSection);
@@ -105,7 +112,7 @@
         </div>
         <div class="flex-1">
           <div style="font-size: var(--font-size-sm); font-weight: 600;">{currentUser.name}</div>
-          <div style="font-size: var(--font-size-xs); color: var(--text-muted);">{currentUser.role === 'admin' ? 'Administrador' : 'Cajero'}</div>
+          <div style="font-size: var(--font-size-xs); color: var(--text-muted);">{getRoleLabel(currentUser.role)}</div>
         </div>
       </div>
       <button
@@ -133,7 +140,7 @@
       {/await}
     {:else if currentRoute === 'sales'}
       {#await import('./sales/SalesPage.svelte') then { default: SalesPage }}
-        <SalesPage />
+        <SalesPage {currentUser} />
       {/await}
     {:else if currentRoute === 'inventory'}
       {#await import('./inventory/InventoryPage.svelte') then { default: InventoryPage }}
@@ -145,11 +152,11 @@
       {/await}
     {:else if currentRoute === 'reports'}
       {#await import('./reports/ReportsPage.svelte') then { default: ReportsPage }}
-        <ReportsPage />
+        <ReportsPage {currentUser} />
       {/await}
     {:else if currentRoute === 'settings'}
       {#await import('./settings/SettingsPage.svelte') then { default: SettingsPage }}
-        <SettingsPage />
+        <SettingsPage {currentUser} />
       {/await}
     {/if}
   </main>

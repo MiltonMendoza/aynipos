@@ -1,8 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Sale, SaleItem } from '$lib/types';
+  import type { Sale, SaleItem, User } from '$lib/types';
   import { getSales, getSaleItems, cancelSale, getSettings } from '$lib/services/api';
   import { printReceipt, extractBusinessInfo, type BusinessInfo } from '$lib/services/receipt';
+  import { hasPermission } from '$lib/services/permissions';
+
+  let { currentUser }: { currentUser: User | null } = $props();
 
   let sales: Sale[] = $state([]);
   let selectedSale: Sale | null = $state(null);
@@ -317,9 +320,11 @@
             >
               🖨️ Imprimir Recibo
             </button>
-            <button class="btn btn-danger" style="flex: 1;" onclick={() => handleCancel(selectedSale!.id)}>
-              🚫 Anular Venta
-            </button>
+            {#if hasPermission(currentUser, 'cancel_sales')}
+              <button class="btn btn-danger" style="flex: 1;" onclick={() => handleCancel(selectedSale!.id)}>
+                🚫 Anular Venta
+              </button>
+            {/if}
           </div>
         {:else}
           <div style="margin-top: var(--space-xl);">

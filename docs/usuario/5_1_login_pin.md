@@ -48,7 +48,7 @@ Solo desde la sección **Configuración** se pueden crear, editar o eliminar usu
    - **Nombre**: el nombre del cajero o empleado
    - **PIN**: un número de 4 a 6 dígitos (debe ser único)
    - **Confirmar PIN**: repite el mismo número
-   - **Rol**: "Cajero" o "Administrador"
+   - **Rol**: "Cajero", "Inventarista" o "Administrador"
 5. Haz clic en **➕ Crear**
 
 ### Editar un usuario
@@ -78,8 +78,12 @@ No. Cada usuario debe tener un PIN diferente. Si intentas usar uno que ya existe
 ### ¿Cuál es el PIN por defecto?
 El sistema viene con un usuario **Administrador** y PIN **1234**. Te recomendamos cambiarlo la primera vez que ingreses.
 
-### ¿Qué diferencia hay entre Administrador y Cajero?
-Por ahora ambos roles tienen acceso completo al sistema. En futuras versiones, el rol de **Cajero** tendrá acceso limitado (solo Punto de Venta y Ventas).
+### ¿Qué diferencia hay entre los roles?
+- **Administrador**: acceso completo al sistema
+- **Cajero**: solo Punto de Venta, Ventas, Clientes y Caja
+- **Inventarista**: solo Inventario y Reportes de inventario
+
+Para más detalles, consulta la guía de [🛡️ Roles y permisos](5_2_roles_permisos.md).
 
 ---
 

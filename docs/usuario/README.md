@@ -46,6 +46,7 @@
 | # | Función | Descripción | Documentación |
 |---|---------|-------------|---------------|
 | 5.1 | 🔐 Login con PIN | Ingresa al sistema con un PIN numérico rápido y seguro | [Ver guía](5_1_login_pin.md) |
+| 5.2 | 🛡️ Roles y permisos | Controla quién accede a cada sección según su puesto | [Ver guía](5_2_roles_permisos.md) |
 
 ---
 

@@ -1,8 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { getDashboardStats, getSales, getTopSellingProducts, getSalesChartData, getProfitMarginReport, getInventoryReport, saveReportCsv, saveReportHtml } from '$lib/services/api';
-  import type { DashboardStats, Sale, TopSellingProduct, SalesChartDataPoint, ProfitMarginProduct, InventoryReportItem } from '$lib/types';
+  import type { DashboardStats, Sale, TopSellingProduct, SalesChartDataPoint, ProfitMarginProduct, InventoryReportItem, User } from '$lib/types';
   import { save } from '@tauri-apps/plugin-dialog';
+  import { hasPermission } from '$lib/services/permissions';
+
+  let { currentUser }: { currentUser: User | null } = $props();
   import { openPath } from '@tauri-apps/plugin-opener';
 
   let stats: DashboardStats = $state({
@@ -569,6 +572,7 @@
   </div>
 
   <!-- ─── Sales Chart ──────────────────────────────────── -->
+  {#if hasPermission(currentUser, 'view_reports_sales')}
   <div class="card" style="margin-bottom: var(--space-2xl);">
     <div class="top-header">
       <h3 style="font-weight: 700;">📈 Gráfico de ventas</h3>
@@ -817,8 +821,10 @@
       </div>
     {/if}
   </div>
+  {/if}
 
   <!-- ─── Profit Margin ──────────────────────────────────── -->
+  {#if hasPermission(currentUser, 'view_reports_inventory')}
   <div class="card" style="margin-bottom: var(--space-2xl);">
     <div class="top-header">
       <h3 style="font-weight: 700;">💰 Margen de Ganancia</h3>
@@ -1066,7 +1072,9 @@
       </div>
     {/if}
   </div>
+  {/if}
 
+  {#if hasPermission(currentUser, 'view_reports_sales')}
   <div class="card">
     <h3 style="font-weight: 700; margin-bottom: var(--space-lg);">Últimas Ventas</h3>
     <div class="table-container" style="border: none;">
@@ -1087,6 +1095,7 @@
       </table>
     </div>
   </div>
+  {/if}
 </div>
 
 <style>
