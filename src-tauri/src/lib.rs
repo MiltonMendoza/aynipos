@@ -41,6 +41,8 @@ pub fn run() {
             commands::inventory::get_inventory,
             commands::inventory::adjust_inventory,
             commands::inventory::get_inventory_movements,
+            commands::inventory::get_product_lots,
+            commands::inventory::delete_lot,
             // Customers
             commands::customers::get_customers,
             commands::customers::create_customer,

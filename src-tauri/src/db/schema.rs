@@ -3,6 +3,7 @@ use rusqlite::Connection;
 
 const MIGRATION_V1: &str = include_str!("../../migrations/001_initial.sql");
 const MIGRATION_V2: &str = include_str!("../../migrations/002_sale_notes.sql");
+const MIGRATION_V3: &str = include_str!("../../migrations/003_lot_movements.sql");
 
 pub fn run_migrations(conn: &Connection) -> Result<()> {
     // Create migrations tracking table
@@ -35,6 +36,13 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.execute("INSERT INTO _migrations (version) VALUES (2)", [])?;
     }
 
-    log::info!("Database at version {}", std::cmp::max(current_version, 2));
+    if current_version < 3 {
+        log::info!("Applying migration v3: lot tracking in movements");
+        conn.execute_batch(MIGRATION_V3)?;
+        conn.execute("INSERT INTO _migrations (version) VALUES (3)", [])?;
+    }
+
+    log::info!("Database at version {}", std::cmp::max(current_version, 3));
     Ok(())
 }
+

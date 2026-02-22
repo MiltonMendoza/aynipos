@@ -170,6 +170,17 @@ export interface InventoryMovement {
   created_at: string | null;
 }
 
+export interface InventoryLot {
+  id: string;
+  product_id: string;
+  quantity: number;
+  lot_number: string | null;
+  expiry_date: string | null;
+  cost_price: number | null;
+  expiry_status: string; // "ok" | "warning" | "danger" | "expired"
+  updated_at: string | null;
+}
+
 // ─── Dashboard ─────────────────────────────────────────
 
 export interface DashboardStats {

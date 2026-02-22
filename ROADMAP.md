@@ -51,7 +51,7 @@
 |---|---------|-------------|--------|
 | 2.1 | **Editar producto** | Modal completo para editar nombre, precios, categoría, stock mínimo, código de barras. | ✅ Completado |
 | 2.2 | **Importar/exportar productos** | Import desde CSV/Excel para carga masiva de catálogo. Export del inventario actual. | ✅ Completado |
-| 2.3 | **Control de lotes y vencimiento** | Asignar número de lote y fecha de vencimiento por cada entrada de inventario. Alertas visuales por colores. | ⬜ Pendiente |
+| 2.3 | **Control de lotes y vencimiento** | Asignar número de lote y fecha de vencimiento por cada entrada de inventario. Alertas visuales por colores. | ✅ Completado |
 | 2.4 | **Alertas automáticas** | Notificaciones en la app cuando un producto está bajo stock mínimo o próximo a vencer (7, 15, 30 días). | ⬜ Pendiente |
 | 2.5 | **Historial de movimientos por producto** | Vista detallada de todas las entradas/salidas/ajustes por producto con fechas y responsable. | ⬜ Pendiente |
 | 2.6 | **Múltiples unidades de medida** | Venta por caja, blíster, unidad con conversión automática (ej: 1 caja = 10 blísteres = 100 unidades). | ⬜ Pendiente |

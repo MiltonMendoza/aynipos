@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { ProductWithStock, Category, CreateProduct, UpdateProduct, ImportResult } from '$lib/types';
-  import { getInventory, adjustInventory, getCategories, createProduct, createCategory, updateProduct, exportProductsCsv, importProductsCsv } from '$lib/services/api';
+  import type { ProductWithStock, Category, CreateProduct, UpdateProduct, ImportResult, InventoryLot } from '$lib/types';
+  import { getInventory, adjustInventory, getCategories, createProduct, createCategory, updateProduct, exportProductsCsv, importProductsCsv, getProductLots, deleteLot } from '$lib/services/api';
   import { save, open } from '@tauri-apps/plugin-dialog';
 
   let inventory: ProductWithStock[] = $state([]);
@@ -14,6 +14,8 @@
   let adjustQty = $state(0);
   let adjustType = $state('purchase');
   let adjustNotes = $state('');
+  let adjustLotNumber = $state('');
+  let adjustExpiryDate = $state('');
 
   // Edit product
   let showEditProduct = $state(false);
@@ -36,6 +38,12 @@
   let importResult: ImportResult | null = $state(null);
   let isExporting = $state(false);
   let isImporting = $state(false);
+
+  // Lots
+  let showLots = $state(false);
+  let lotsProduct: ProductWithStock | null = $state(null);
+  let lots: InventoryLot[] = $state([]);
+  let lotsLoading = $state(false);
 
   onMount(loadInventory);
 
@@ -122,6 +130,8 @@
     adjustQty = 0;
     adjustType = 'purchase';
     adjustNotes = '';
+    adjustLotNumber = '';
+    adjustExpiryDate = '';
     adjustErrors = {};
     showAdjust = true;
   }
@@ -131,7 +141,12 @@
     if (!adjustProduct) return;
     const qty = adjustType === 'adjustment' && adjustQty < 0 ? adjustQty : Math.abs(adjustQty);
     try {
-      await adjustInventory(adjustProduct.product.id, qty, adjustType, adjustNotes || undefined);
+      await adjustInventory(
+        adjustProduct.product.id, qty, adjustType,
+        adjustNotes || undefined,
+        adjustLotNumber || undefined,
+        adjustExpiryDate || undefined
+      );
       showAdjust = false;
       await loadInventory();
     } catch (e) { alert('Error: ' + e); }
@@ -246,6 +261,52 @@
     }
   }
 
+  async function openLots(ps: ProductWithStock) {
+    lotsProduct = ps;
+    lotsLoading = true;
+    showLots = true;
+    try {
+      lots = await getProductLots(ps.product.id);
+    } catch (e) {
+      alert('Error al cargar lotes: ' + e);
+      lots = [];
+    } finally {
+      lotsLoading = false;
+    }
+  }
+
+  async function handleDeleteLot(lotId: string) {
+    if (!confirm('¿Eliminar este lote vacío?')) return;
+    try {
+      await deleteLot(lotId);
+      if (lotsProduct) {
+        lots = await getProductLots(lotsProduct.product.id);
+      }
+      await loadInventory();
+    } catch (e) {
+      alert('Error: ' + e);
+    }
+  }
+
+  function formatDate(date: string | null): string {
+    if (!date) return '—';
+    try {
+      const d = new Date(date + 'T00:00:00');
+      return d.toLocaleDateString('es-BO', { year: 'numeric', month: 'short', day: 'numeric' });
+    } catch {
+      return date;
+    }
+  }
+
+  function expiryBadge(status: string): { label: string; class: string } {
+    switch (status) {
+      case 'expired': return { label: '❌ Vencido', class: 'badge-danger' };
+      case 'danger': return { label: '🔴 Crítico', class: 'badge-danger' };
+      case 'warning': return { label: '🟡 Por vencer', class: 'badge-warning' };
+      default: return { label: '🟢 OK', class: 'badge-success' };
+    }
+  }
+
   $effect(() => {
     loadInventory();
   });
@@ -323,6 +384,7 @@
               </td>
               <td>
                 <button class="btn btn-ghost btn-sm" onclick={() => openEditProduct(ps)}>✏️ Editar</button>
+                <button class="btn btn-ghost btn-sm" onclick={() => openLots(ps)}>📦 Lotes</button>
                 <button class="btn btn-ghost btn-sm" onclick={() => openAdjust(ps)}>📊 Ajustar</button>
               </td>
             </tr>
@@ -524,6 +586,16 @@
           <input class="input" class:input-error={adjustErrors.qty} type="number" bind:value={adjustQty} oninput={() => { if (adjustErrors.qty) adjustErrors = {}; }} />
           {#if adjustErrors.qty}<span class="field-error">{adjustErrors.qty}</span>{/if}
         </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg);">
+          <div class="input-group">
+            <label class="input-label">Número de lote</label>
+            <input class="input" bind:value={adjustLotNumber} placeholder="LOTE-2026-A" />
+          </div>
+          <div class="input-group">
+            <label class="input-label">Fecha de vencimiento</label>
+            <input class="input" type="date" bind:value={adjustExpiryDate} />
+          </div>
+        </div>
         <div class="input-group">
           <label class="input-label">Notas</label>
           <input class="input" bind:value={adjustNotes} placeholder="Motivo del ajuste..." />
@@ -532,6 +604,76 @@
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick={() => showAdjust = false}>Cancelar</button>
         <button class="btn btn-primary" onclick={handleAdjust}>✅ Aplicar</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Lots Modal -->
+{#if showLots && lotsProduct}
+  <div class="modal-overlay" onclick={() => showLots = false}>
+    <div class="modal modal-lg" onclick={(e) => e.stopPropagation()}>
+      <div class="modal-header">
+        <h3 class="modal-title">📦 Lotes — {lotsProduct.product.name}</h3>
+        <button class="btn btn-ghost btn-sm" onclick={() => showLots = false}>✕</button>
+      </div>
+      <div class="modal-body">
+        {#if lotsLoading}
+          <div class="text-center text-muted" style="padding: var(--space-2xl);">Cargando lotes...</div>
+        {:else if lots.length === 0}
+          <div class="text-center text-muted" style="padding: var(--space-2xl);">
+            <div style="font-size: var(--font-size-2xl); margin-bottom: var(--space-md);">📭</div>
+            <div>No hay lotes registrados para este producto.</div>
+            <div class="text-sm" style="margin-top: var(--space-sm);">Usa "📊 Ajustar" para agregar stock con número de lote.</div>
+          </div>
+        {:else}
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-lg); margin-bottom: var(--space-xl);">
+            <div class="stat-card" style="text-align: center;">
+              <div style="font-size: var(--font-size-2xl); font-weight: 700; color: var(--accent-primary);">{lots.length}</div>
+              <div class="text-sm text-muted">Total lotes</div>
+            </div>
+            <div class="stat-card" style="text-align: center;">
+              <div style="font-size: var(--font-size-2xl); font-weight: 700; color: var(--accent-success);">{lots.reduce((s, l) => s + l.quantity, 0)}</div>
+              <div class="text-sm text-muted">Stock total</div>
+            </div>
+            <div class="stat-card" style="text-align: center;">
+              <div style="font-size: var(--font-size-2xl); font-weight: 700; color: var(--accent-danger);">{lots.filter(l => l.expiry_status === 'danger' || l.expiry_status === 'expired').length}</div>
+              <div class="text-sm text-muted">Lotes críticos</div>
+            </div>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Lote</th>
+                  <th>Vencimiento</th>
+                  <th>Cantidad</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each lots as lot}
+                  {@const badge = expiryBadge(lot.expiry_status)}
+                  <tr>
+                    <td style="font-weight: 600;">{lot.lot_number || 'Sin lote'}</td>
+                    <td>{formatDate(lot.expiry_date)}</td>
+                    <td style="font-weight: 700;">{lot.quantity}</td>
+                    <td><span class="badge {badge.class}">{badge.label}</span></td>
+                    <td>
+                      {#if lot.quantity === 0}
+                        <button class="btn btn-ghost btn-sm" onclick={() => handleDeleteLot(lot.id)} style="color: var(--accent-danger);">🗑️ Eliminar</button>
+                      {/if}
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        {/if}
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick={() => showLots = false}>Cerrar</button>
       </div>
     </div>
   </div>

@@ -122,6 +122,18 @@ pub struct InventoryMovement {
     pub created_at: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InventoryLot {
+    pub id: String,
+    pub product_id: String,
+    pub quantity: f64,
+    pub lot_number: Option<String>,
+    pub expiry_date: Option<String>,
+    pub cost_price: Option<f64>,
+    pub expiry_status: String, // "ok", "warning", "danger", "expired"
+    pub updated_at: Option<String>,
+}
+
 // ─── Sales ─────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

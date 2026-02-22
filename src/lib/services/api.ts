@@ -4,7 +4,7 @@ import type {
   Customer, CreateCustomer,
   Sale, SaleItem, CreateSale,
   CashRegister,
-  InventoryMovement,
+  InventoryMovement, InventoryLot,
   DashboardStats,
   Setting, Category, CreateCategory,
   ImportResult
@@ -79,6 +79,14 @@ export async function adjustInventory(
 
 export async function getInventoryMovements(productId?: string, limit?: number): Promise<InventoryMovement[]> {
   return invoke('get_inventory_movements', { productId, limit });
+}
+
+export async function getProductLots(productId: string): Promise<InventoryLot[]> {
+  return invoke('get_product_lots', { productId });
+}
+
+export async function deleteLot(lotId: string): Promise<void> {
+  return invoke('delete_lot', { lotId });
 }
 
 // ─── Customers ─────────────────────────────────────────
