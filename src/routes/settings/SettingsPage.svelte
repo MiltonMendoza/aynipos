@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import type { Setting, CashRegister, User, CreateUser, AuditLogEntry } from '$lib/types';
-  import { getSettings, updateSetting, getCurrentCashRegister, openCashRegister, closeCashRegister, getCashRegisterReport, getUsers, createUser, updateUser, deleteUser, logAction, getAuditLog } from '$lib/services/api';
+  import { onMount, onDestroy } from 'svelte';
+  import type { Setting, CashRegister, User, CreateUser, AuditLogEntry, BackupInfo, LicenseStatus } from '$lib/types';
+  import { getSettings, updateSetting, getCurrentCashRegister, openCashRegister, closeCashRegister, getCashRegisterReport, getUsers, createUser, updateUser, deleteUser, logAction, getAuditLog, createBackup, getBackupInfo, getLicenseStatus, activateLicense, deactivateLicense } from '$lib/services/api';
   import { extractBusinessInfo, type BusinessInfo } from '$lib/services/receipt';
   import { printCashReport } from '$lib/services/cashReportPrint';
   import { getRoleLabel, getRoleIcon, hasPermission } from '$lib/services/permissions';
+  import { open } from '@tauri-apps/plugin-dialog';
 
   let { currentUser }: { currentUser: User | null } = $props();
 
@@ -51,6 +52,24 @@
   let auditFilterDateTo = $state('');
   let auditLimit = $state(50);
 
+  // Backup
+  let backupPath = $state('');
+  let backupFrequency = $state('24');
+  let backupInfo: BackupInfo | null = $state(null);
+  let backupRunning = $state(false);
+  let backupSuccess = $state(false);
+  let backupError = $state('');
+  let backupTimerId: ReturnType<typeof setInterval> | null = $state(null);
+  let lastAutoBackup = $state(0);
+
+  // License
+  let licenseStatus: LicenseStatus | null = $state(null);
+  let licenseKey = $state('');
+  let licenseError = $state('');
+  let licenseLoading = $state(false);
+  let licenseCopied = $state(false);
+  let showActivateModal = $state(false);
+
   onMount(async () => {
     try {
       settings = await getSettings();
@@ -62,9 +81,22 @@
         if (s.key === 'business_address') businessAddress = s.value;
         if (s.key === 'business_phone') businessPhone = s.value;
         if (s.key === 'business_city') businessCity = s.value;
+        if (s.key === 'backup_path') backupPath = s.value;
+        if (s.key === 'backup_frequency_hours') backupFrequency = s.value;
       }
       users = await getUsers();
+      // Load backup info
+      if (backupPath) {
+        await loadBackupInfo();
+        startAutoBackup();
+      }
+      // Load license
+      await loadLicenseStatus();
     } catch {}
+  });
+
+  onDestroy(() => {
+    if (backupTimerId) clearInterval(backupTimerId);
   });
 
   async function saveBusiness() {
@@ -296,6 +328,131 @@
     const date = new Date(d + 'Z');
     return date.toLocaleDateString('es-BO', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
+
+  // ─── Backup ────────────────────────────────────────────
+  async function loadBackupInfo() {
+    if (!backupPath) return;
+    try {
+      backupInfo = await getBackupInfo(backupPath);
+    } catch { backupInfo = null; }
+  }
+
+  async function handleSelectBackupFolder() {
+    try {
+      const selected = await open({ directory: true, title: 'Seleccionar carpeta de backup' });
+      if (selected) {
+        backupPath = selected as string;
+        await updateSetting('backup_path', backupPath);
+        await loadBackupInfo();
+        startAutoBackup();
+      }
+    } catch (e) {
+      backupError = 'Error al seleccionar carpeta: ' + e;
+    }
+  }
+
+  async function handleBackupFrequencyChange() {
+    await updateSetting('backup_frequency_hours', backupFrequency);
+    startAutoBackup();
+  }
+
+  async function handleManualBackup() {
+    if (!backupPath || backupRunning) return;
+    backupRunning = true;
+    backupError = '';
+    backupSuccess = false;
+    try {
+      await createBackup(backupPath);
+      backupSuccess = true;
+      lastAutoBackup = Date.now();
+      await loadBackupInfo();
+      if (currentUser) {
+        logAction(currentUser.id, currentUser.name, 'backup_created', 'backup', undefined, `Backup manual en: ${backupPath}`);
+      }
+      setTimeout(() => { backupSuccess = false; }, 4000);
+    } catch (e) {
+      backupError = 'Error al crear backup: ' + e;
+    }
+    backupRunning = false;
+  }
+
+  function startAutoBackup() {
+    if (backupTimerId) clearInterval(backupTimerId);
+    if (!backupPath) return;
+    const hours = parseInt(backupFrequency) || 24;
+    const ms = hours * 60 * 60 * 1000;
+    backupTimerId = setInterval(async () => {
+      try {
+        await createBackup(backupPath);
+        lastAutoBackup = Date.now();
+        await loadBackupInfo();
+        console.info('Auto-backup completado');
+      } catch (e) {
+        console.error('Error en auto-backup:', e);
+      }
+    }, ms);
+  }
+
+  function formatBytes(bytes: number): string {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function formatBackupDate(d: string | null): string {
+    if (!d) return 'Nunca';
+    const date = new Date(d);
+    return date.toLocaleDateString('es-BO', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  // ─── License ────────────────────────────────────────────
+  async function loadLicenseStatus() {
+    try {
+      licenseStatus = await getLicenseStatus();
+    } catch { licenseStatus = null; }
+  }
+
+  async function handleActivateLicense() {
+    if (!licenseKey.trim()) { licenseError = 'Ingrese una clave de licencia'; return; }
+    licenseLoading = true;
+    licenseError = '';
+    try {
+      licenseStatus = await activateLicense(licenseKey.trim());
+      licenseKey = '';
+      showActivateModal = false;
+    } catch (e) {
+      licenseError = String(e);
+    }
+    licenseLoading = false;
+  }
+
+  async function handleDeactivateLicense() {
+    if (!confirm('¿Desactivar la licencia? La app volverá al modo de prueba.')) return;
+    try {
+      await deactivateLicense();
+      await loadLicenseStatus();
+    } catch (e) {
+      alert('Error: ' + e);
+    }
+  }
+
+  async function copyMachineId() {
+    if (!licenseStatus) return;
+    try {
+      await navigator.clipboard.writeText(licenseStatus.machine_id);
+      licenseCopied = true;
+      setTimeout(() => { licenseCopied = false; }, 2000);
+    } catch {
+      const input = document.createElement('input');
+      input.value = licenseStatus.machine_id;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      document.body.removeChild(input);
+      licenseCopied = true;
+      setTimeout(() => { licenseCopied = false; }, 2000);
+    }
+  }
 </script>
 
 <div class="page">
@@ -403,6 +560,177 @@
           </table>
         </div>
       {/if}
+    </div>
+  </div>
+  {/if}
+
+  <!-- Backup Section -->
+  {#if hasPermission(currentUser, 'manage_settings')}
+  <div style="max-width: 900px; margin-top: var(--space-xl);">
+    <div class="card">
+      <h3 style="font-weight: 700; margin-bottom: var(--space-lg);">💾 Backup Automático</h3>
+
+      <!-- Backup folder -->
+      <div style="display: flex; flex-direction: column; gap: var(--space-lg);">
+        <div>
+          <label class="input-label">Carpeta de destino</label>
+          <div style="display: flex; gap: var(--space-sm); align-items: center;">
+            <input class="input" value={backupPath || 'Sin configurar'} readonly
+              style="flex: 1; opacity: {backupPath ? 1 : 0.5}; cursor: default;" />
+            <button class="btn btn-ghost" onclick={handleSelectBackupFolder}>📂 Cambiar</button>
+          </div>
+        </div>
+
+        <!-- Frequency -->
+        <div>
+          <label class="input-label">Frecuencia de backup</label>
+          <select class="select" bind:value={backupFrequency} onchange={handleBackupFrequencyChange}
+            style="width: 200px;">
+            <option value="1">Cada 1 hora</option>
+            <option value="2">Cada 2 horas</option>
+            <option value="4">Cada 4 horas</option>
+            <option value="8">Cada 8 horas</option>
+            <option value="12">Cada 12 horas</option>
+            <option value="24">Cada 24 horas</option>
+          </select>
+        </div>
+
+        <!-- Last backup info -->
+        {#if backupInfo}
+          <div style="background: var(--bg-tertiary); border-radius: var(--radius-lg); padding: var(--space-lg);">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-md);">
+              <div>
+                <div class="text-sm text-muted" style="margin-bottom: var(--space-xs);">Último backup</div>
+                <div style="font-weight: 600; font-size: var(--font-size-sm);">
+                  {backupInfo.last_backup ? formatBackupDate(backupInfo.last_backup.created_at) : 'Nunca'}
+                </div>
+              </div>
+              <div>
+                <div class="text-sm text-muted" style="margin-bottom: var(--space-xs);">Total backups</div>
+                <div style="font-weight: 600;">{backupInfo.total_backups}</div>
+              </div>
+              <div>
+                <div class="text-sm text-muted" style="margin-bottom: var(--space-xs);">Espacio usado</div>
+                <div style="font-weight: 600;">{formatBytes(backupInfo.total_size_bytes)}</div>
+              </div>
+            </div>
+            {#if backupInfo.last_backup}
+              <div class="text-sm text-muted" style="margin-top: var(--space-sm); word-break: break-all;">
+                📄 {backupInfo.last_backup.file_name} ({formatBytes(backupInfo.last_backup.size_bytes)})
+              </div>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Manual backup + status -->
+        <div style="display: flex; align-items: center; gap: var(--space-md);">
+          <button class="btn btn-primary" onclick={handleManualBackup}
+            disabled={!backupPath || backupRunning}>
+            {#if backupRunning}
+              ⏳ Creando backup...
+            {:else if backupSuccess}
+              ✅ Backup completado
+            {:else}
+              📦 Backup Manual Ahora
+            {/if}
+          </button>
+          {#if !backupPath}
+            <span class="text-sm text-muted">Selecciona una carpeta primero</span>
+          {/if}
+        </div>
+
+        {#if backupError}
+          <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid var(--accent-danger); border-radius: var(--radius-md); padding: var(--space-md); color: var(--accent-danger); font-size: var(--font-size-sm);">
+            ❌ {backupError}
+          </div>
+        {/if}
+
+        <div class="text-sm text-muted">
+          💡 Se conservan los últimos 10 backups automáticamente. Los más antiguos se eliminan al crear uno nuevo.
+        </div>
+      </div>
+    </div>
+  </div>
+  {/if}
+
+  <!-- License Section -->
+  {#if hasPermission(currentUser, 'manage_settings') && licenseStatus}
+  <div style="max-width: 900px; margin-top: var(--space-xl);">
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+        <h3 style="font-weight: 700; margin: 0;">🔑 Licencia</h3>
+        <span class="badge" class:badge-success={licenseStatus.status === 'active'}
+          class:badge-warning={licenseStatus.status === 'trial'}
+          class:badge-danger={licenseStatus.status === 'expired'}>
+          {licenseStatus.status === 'active' ? '✅ Activa' : licenseStatus.status === 'trial' ? '⏳ Prueba' : '❌ Expirada'}
+        </span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: var(--space-lg);">
+        <!-- Machine ID -->
+        <div>
+          <label class="input-label">Código de Máquina</label>
+          <div style="display: flex; gap: var(--space-sm); align-items: center; margin-top: var(--space-xs);">
+            <code style="font-size: 1.25rem; font-weight: 700; letter-spacing: 0.1em; color: var(--accent-primary); background: var(--accent-primary-glow); padding: var(--space-sm) var(--space-lg); border-radius: var(--radius-md); border: 1px solid rgba(59, 130, 246, 0.2); font-family: 'JetBrains Mono', monospace;">
+              {licenseStatus.machine_id}
+            </code>
+            <button class="btn btn-ghost btn-sm" onclick={copyMachineId} title="Copiar">
+              {licenseCopied ? '✅' : '📋'}
+            </button>
+          </div>
+        </div>
+
+        <!-- Status details -->
+        {#if licenseStatus.status === 'trial'}
+          <div style="background: var(--accent-warning-glow); border-radius: var(--radius-lg); padding: var(--space-lg);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-sm);">
+              <span style="font-weight: 600; color: var(--accent-warning);">⏳ Periodo de Prueba</span>
+              <span style="font-weight: 700; color: var(--accent-warning);">{licenseStatus.days_remaining} días restantes</span>
+            </div>
+            <div style="background: var(--bg-tertiary); border-radius: var(--radius-full); height: 8px; overflow: hidden;">
+              <div style="background: var(--accent-warning); height: 100%; border-radius: var(--radius-full); transition: width 0.3s; width: {Math.max(0, ((licenseStatus.days_remaining ?? 0) / 20) * 100)}%;">
+              </div>
+            </div>
+          </div>
+        {:else if licenseStatus.status === 'active'}
+          <div style="background: var(--accent-success-glow); border-radius: var(--radius-lg); padding: var(--space-lg);">
+            <div style="display: flex; align-items: center; gap: var(--space-md);">
+              <span style="font-size: 1.5rem;">✅</span>
+              <div>
+                <div style="font-weight: 600; color: var(--accent-success);">Licencia Activa</div>
+                <div class="text-sm text-muted">
+                  Tipo: {licenseStatus.license_type === 'perpetual' ? 'Perpetua' : 'Suscripción'}
+                  {#if licenseStatus.expiry_date}
+                    · Expira: {licenseStatus.expiry_date}
+                  {/if}
+                </div>
+              </div>
+            </div>
+          </div>
+        {:else}
+          <div style="background: var(--accent-danger-glow); border-radius: var(--radius-lg); padding: var(--space-lg);">
+            <div style="display: flex; align-items: center; gap: var(--space-md);">
+              <span style="font-size: 1.5rem;">❌</span>
+              <div>
+                <div style="font-weight: 600; color: var(--accent-danger);">Periodo de Prueba Expirado</div>
+                <div class="text-sm text-muted">Active una licencia para continuar usando AyniPOS.</div>
+              </div>
+            </div>
+          </div>
+        {/if}
+
+        <!-- Actions -->
+        <div style="display: flex; gap: var(--space-md);">
+          <button class="btn btn-primary" onclick={() => { licenseKey = ''; licenseError = ''; showActivateModal = true; }}>
+            🔑 {licenseStatus.status === 'active' ? 'Cambiar Licencia' : 'Activar Licencia'}
+          </button>
+          {#if licenseStatus.status === 'active'}
+            <button class="btn btn-ghost" style="color: var(--accent-danger);" onclick={handleDeactivateLicense}>
+              🗑️ Desactivar
+            </button>
+          {/if}
+        </div>
+      </div>
     </div>
   </div>
   {/if}
@@ -566,6 +894,34 @@
         <button class="btn btn-ghost" onclick={() => showUserModal = false}>Cancelar</button>
         <button class="btn btn-primary" onclick={handleSaveUser}>
           {editingUser ? '💾 Guardar' : '➕ Crear'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if showActivateModal}
+  <div class="modal-overlay" onclick={() => showActivateModal = false}>
+    <div class="modal" onclick={(e) => e.stopPropagation()}>
+      <div class="modal-header"><h3 class="modal-title">🔑 Activar Licencia</h3></div>
+      <div class="modal-body">
+        <div class="input-group">
+          <label class="input-label">Clave de Licencia</label>
+          <textarea
+            class="input"
+            class:input-error={licenseError}
+            bind:value={licenseKey}
+            placeholder="Pegue aquí la clave de licencia..."
+            rows="3"
+            style="font-family: 'JetBrains Mono', monospace; font-size: var(--font-size-sm); resize: none;"
+          ></textarea>
+          {#if licenseError}<span class="field-error">{licenseError}</span>{/if}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick={() => showActivateModal = false}>Cancelar</button>
+        <button class="btn btn-primary" onclick={handleActivateLicense} disabled={!licenseKey.trim() || licenseLoading}>
+          {licenseLoading ? '⏳ Verificando...' : '🔓 Activar'}
         </button>
       </div>
     </div>

@@ -118,7 +118,7 @@
 | 5.2 | **Roles y permisos** | Administrador (acceso total), Cajero (solo POS y ventas), Inventarista (solo stock). Permisos granulares. | ✅ Completado |
 | 5.3 | **Registro de acciones (audit log)** | Log detallado: quién hizo qué y cuándo. Ventas, anulaciones, ajustes de inventario, cambios de precio. | ✅ Completado |
 | 5.4 | **Cajero por turno** | Cada apertura/cierre de caja asociada a un cajero específico. Reportes individuales por cajero. | ✅ Completado |
-| 5.5 | **Backup automático** | Respaldo automático del archivo SQLite a carpeta configurable (local o USB). Frecuencia configurable. | ⬜ Pendiente |
+| 5.5 | **Backup automático** | Respaldo automático del archivo SQLite a carpeta configurable (local o USB). Frecuencia configurable. | ✅ Completado |
 
 ### Criterios de completitud Fase 5:
 - [ ] Dos cajeros pueden tener sesiones independientes

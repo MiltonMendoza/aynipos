@@ -322,3 +322,28 @@ export interface AuditLogEntry {
   details: string | null;
   created_at: string | null;
 }
+
+// ─── Backup ───────────────────────────────────────────
+
+export interface BackupResult {
+  file_path: string;
+  file_name: string;
+  size_bytes: number;
+  created_at: string;
+}
+
+export interface BackupInfo {
+  last_backup: BackupResult | null;
+  total_backups: number;
+  total_size_bytes: number;
+}
+
+// ─── License ──────────────────────────────────────────
+
+export interface LicenseStatus {
+  status: 'trial' | 'active' | 'expired';
+  machine_id: string;
+  days_remaining: number | null;
+  license_type: string | null;
+  expiry_date: string | null;
+}

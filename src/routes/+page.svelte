@@ -1,8 +1,8 @@
 <script lang="ts">
   import '../app.css';
-  import type { AppRoute, User } from '$lib/types';
+  import type { AppRoute, User, LicenseStatus } from '$lib/types';
   import { canAccessRoute, getDefaultRoute, getRoleLabel, getRoleIcon } from '$lib/services/permissions';
-  import { logAction } from '$lib/services/api';
+  import { logAction, getLicenseStatus } from '$lib/services/api';
 
   let { children } = $props();
 
@@ -10,6 +10,29 @@
   let lowStockBadge = $state(0);
   let showShortcuts = $state(false);
   let currentUser: User | null = $state(null);
+  let licenseStatus: LicenseStatus | null = $state(null);
+  let licenseLoading = $state(true);
+
+  // Check license on mount
+  $effect(() => {
+    checkLicense();
+  });
+
+  async function checkLicense() {
+    licenseLoading = true;
+    try {
+      licenseStatus = await getLicenseStatus();
+    } catch (e) {
+      console.error('License check failed:', e);
+      // If license check fails, allow app (don't lock out due to bugs)
+      licenseStatus = { status: 'trial', machine_id: '', days_remaining: 20, license_type: null, expiry_date: null };
+    }
+    licenseLoading = false;
+  }
+
+  function handleLicenseActivated() {
+    checkLicense();
+  }
 
   const navItems: { route: AppRoute; icon: string; label: string; section?: string }[] = [
     { route: 'pos', icon: '🛒', label: 'Punto de Venta', section: 'Principal' },
@@ -71,7 +94,24 @@
 
 <svelte:window onkeydown={handleGlobalKeydown} />
 
-{#if !currentUser}
+{#if licenseLoading}
+  <!-- Loading license check -->
+  <div class="license-loading">
+    <div class="license-loading-spinner"></div>
+    <p>Verificando licencia...</p>
+  </div>
+{:else if licenseStatus?.status === 'expired'}
+  <!-- License expired — block app -->
+  {#await import('./activation/ActivationScreen.svelte') then { default: ActivationScreen }}
+    <ActivationScreen onActivated={handleLicenseActivated} />
+  {/await}
+{:else if !currentUser}
+  <!-- Trial banner -->
+  {#if licenseStatus?.status === 'trial'}
+    <div class="trial-banner">
+      ⏳ Periodo de prueba: <strong>{licenseStatus.days_remaining} días restantes</strong>
+    </div>
+  {/if}
   {#await import('./login/LoginScreen.svelte') then { default: LoginScreen }}
     <LoginScreen onLogin={handleLogin} />
   {/await}

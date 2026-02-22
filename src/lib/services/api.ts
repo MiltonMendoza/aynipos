@@ -9,7 +9,9 @@ import type {
   Setting, Category, CreateCategory,
   ImportResult,
   User, CreateUser, UpdateUser,
-  AuditLogEntry
+  AuditLogEntry,
+  BackupResult, BackupInfo,
+  LicenseStatus
 } from '$lib/types';
 
 // ─── Products ──────────────────────────────────────────
@@ -233,4 +235,32 @@ export async function getAuditLog(
   dateFrom?: string, dateTo?: string, limit?: number
 ): Promise<AuditLogEntry[]> {
   return invoke('get_audit_log', { userId, action, dateFrom, dateTo, limit });
+}
+
+// ─── Backup ────────────────────────────────────────────
+
+export async function createBackup(backupPath: string): Promise<BackupResult> {
+  return invoke('create_backup', { backupPath });
+}
+
+export async function getBackupInfo(backupPath: string): Promise<BackupInfo> {
+  return invoke('get_backup_info', { backupPath });
+}
+
+// ─── License ───────────────────────────────────────────
+
+export async function getMachineId(): Promise<string> {
+  return invoke('get_machine_id');
+}
+
+export async function getLicenseStatus(): Promise<LicenseStatus> {
+  return invoke('get_license_status');
+}
+
+export async function activateLicense(key: string): Promise<LicenseStatus> {
+  return invoke('activate_license', { key });
+}
+
+export async function deactivateLicense(): Promise<void> {
+  return invoke('deactivate_license');
 }

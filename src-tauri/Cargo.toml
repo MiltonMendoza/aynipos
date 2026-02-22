@@ -21,7 +21,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # Database
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.32", features = ["bundled", "backup"] }
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }
@@ -43,3 +43,9 @@ rust_decimal = { version = "1", features = ["serde"] }
 log = "0.4"
 env_logger = "0.11"
 sha2 = "0.10"
+
+# License system
+machine-uid = "0.5"
+hmac = "0.12"
+hex = "0.4"
+base64 = "0.22"

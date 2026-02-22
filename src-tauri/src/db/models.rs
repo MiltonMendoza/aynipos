@@ -354,3 +354,20 @@ pub struct AuditLogEntry {
     pub details: Option<String>,
     pub created_at: Option<String>,
 }
+
+// ─── Backup ───────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackupResult {
+    pub file_path: String,
+    pub file_name: String,
+    pub size_bytes: u64,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackupInfo {
+    pub last_backup: Option<BackupResult>,
+    pub total_backups: u32,
+    pub total_size_bytes: u64,
+}

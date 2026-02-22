@@ -1,0 +1,12 @@
+[package]
+name = "license-gen"
+version = "0.1.0"
+description = "AyniPOS License Key Generator"
+edition = "2021"
+
+[dependencies]
+sha2 = "0.10"
+hmac = "0.12"
+hex = "0.4"
+base64 = "0.22"
+clap = { version = "4", features = ["derive"] }

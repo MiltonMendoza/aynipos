@@ -83,6 +83,14 @@ pub fn run() {
             // Audit Log
             commands::audit_log::log_action,
             commands::audit_log::get_audit_log,
+            // Backup
+            commands::backup::create_backup,
+            commands::backup::get_backup_info,
+            // License
+            commands::license::get_machine_id,
+            commands::license::get_license_status,
+            commands::license::activate_license,
+            commands::license::deactivate_license,
         ])
         .run(tauri::generate_context!())
         .expect("error while running AyniPOS");

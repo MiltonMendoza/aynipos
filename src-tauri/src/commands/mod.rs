@@ -10,3 +10,5 @@ pub mod import_export;
 pub mod reports;
 pub mod users;
 pub mod audit_log;
+pub mod backup;
+pub mod license;
