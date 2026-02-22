@@ -5,7 +5,7 @@ import type {
   Sale, SaleItem, CreateSale,
   CashRegister, CashRegisterReport,
   InventoryMovement, InventoryLot,
-  DashboardStats, TopSellingProduct,
+  DashboardStats, TopSellingProduct, SalesChartDataPoint,
   Setting, Category, CreateCategory,
   ImportResult
 } from '$lib/types';
@@ -135,6 +135,12 @@ export async function getTopSellingProducts(
   dateFrom?: string, dateTo?: string, limit?: number
 ): Promise<TopSellingProduct[]> {
   return invoke('get_top_selling_products', { dateFrom, dateTo, limit });
+}
+
+export async function getSalesChartData(
+  dateFrom?: string, dateTo?: string, groupBy?: string
+): Promise<SalesChartDataPoint[]> {
+  return invoke('get_sales_chart_data', { dateFrom, dateTo, groupBy });
 }
 
 // ─── Settings ──────────────────────────────────────────

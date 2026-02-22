@@ -98,3 +98,51 @@ pub fn get_top_selling_products(
 
     Ok(products)
 }
+
+#[tauri::command]
+pub fn get_sales_chart_data(
+    db: State<'_, Database>,
+    date_from: Option<String>,
+    date_to: Option<String>,
+    group_by: Option<String>,
+) -> Result<Vec<SalesChartDataPoint>, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let grouping = group_by.unwrap_or_else(|| "day".to_string());
+
+    let group_expr = match grouping.as_str() {
+        "week" => "strftime('%Y-W%W', created_at)",
+        "month" => "strftime('%Y-%m', created_at)",
+        _ => "DATE(created_at)", // day
+    };
+
+    let sql = format!(
+        "SELECT {group_expr} as label,
+                COALESCE(SUM(total), 0) as total_sales,
+                COUNT(*) as transaction_count
+         FROM sales
+         WHERE status = 'completed'
+           AND (?1 IS NULL OR DATE(created_at) >= ?1)
+           AND (?2 IS NULL OR DATE(created_at) <= ?2)
+         GROUP BY label
+         ORDER BY label ASC"
+    );
+
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map(rusqlite::params![date_from, date_to], |row| {
+            Ok(SalesChartDataPoint {
+                label: row.get(0)?,
+                total_sales: row.get(1)?,
+                transaction_count: row.get(2)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut points = Vec::new();
+    for row in rows {
+        points.push(row.map_err(|e| e.to_string())?);
+    }
+
+    Ok(points)
+}

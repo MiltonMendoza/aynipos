@@ -276,3 +276,10 @@ pub struct TopSellingProduct {
     pub total_quantity: f64,
     pub total_revenue: f64,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SalesChartDataPoint {
+    pub label: String,
+    pub total_sales: f64,
+    pub transaction_count: i64,
+}

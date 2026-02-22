@@ -219,6 +219,12 @@ export interface TopSellingProduct {
   total_revenue: number;
 }
 
+export interface SalesChartDataPoint {
+  label: string;
+  total_sales: number;
+  transaction_count: number;
+}
+
 // ─── Settings ──────────────────────────────────────────
 
 export interface Setting {

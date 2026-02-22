@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getDashboardStats, getSales, getTopSellingProducts } from '$lib/services/api';
-  import type { DashboardStats, Sale, TopSellingProduct } from '$lib/types';
+  import { getDashboardStats, getSales, getTopSellingProducts, getSalesChartData } from '$lib/services/api';
+  import type { DashboardStats, Sale, TopSellingProduct, SalesChartDataPoint } from '$lib/types';
 
   let stats: DashboardStats = $state({
     total_sales_today: 0, total_transactions_today: 0, total_products: 0,
@@ -20,7 +20,23 @@
   let topLimit: number = $state(10);
   let sortBy: 'quantity' | 'revenue' = $state('quantity');
 
-  function getDateRange(preset: PeriodPreset): { from?: string; to?: string } {
+  // ─── Sales Chart ───────────────────────────────────────
+  let chartData: SalesChartDataPoint[] = $state([]);
+  let chartLoading = $state(false);
+  let chartGroupBy: 'day' | 'week' | 'month' = $state('day');
+  let chartPeriod: PeriodPreset = $state('month');
+  let chartCustomFrom = $state('');
+  let chartCustomTo = $state('');
+  let hoveredBar: number | null = $state(null);
+
+  // ─── Chart constants ───────────────────────────────────
+  const CHART_W = 800;
+  const CHART_H = 320;
+  const PAD = { top: 20, right: 20, bottom: 60, left: 70 };
+  const INNER_W = CHART_W - PAD.left - PAD.right;
+  const INNER_H = CHART_H - PAD.top - PAD.bottom;
+
+  function getDateRange(preset: PeriodPreset, cf: string, ct: string): { from?: string; to?: string } {
     const now = new Date();
     const fmt = (d: Date) => d.toISOString().split('T')[0];
     switch (preset) {
@@ -41,7 +57,7 @@
         return { from: fmt(start), to: fmt(end) };
       }
       case 'custom':
-        return { from: customFrom || undefined, to: customTo || undefined };
+        return { from: cf || undefined, to: ct || undefined };
       default:
         return {};
     }
@@ -50,16 +66,29 @@
   async function loadTopProducts() {
     topLoading = true;
     try {
-      const { from, to } = getDateRange(selectedPeriod);
+      const { from, to } = getDateRange(selectedPeriod, customFrom, customTo);
       topProducts = await getTopSellingProducts(from, to, topLimit);
     } catch { topProducts = []; }
     topLoading = false;
   }
 
+  async function loadChartData() {
+    chartLoading = true;
+    try {
+      const { from, to } = getDateRange(chartPeriod, chartCustomFrom, chartCustomTo);
+      chartData = await getSalesChartData(from, to, chartGroupBy);
+    } catch { chartData = []; }
+    chartLoading = false;
+  }
+
   $effect(() => {
-    // Re-fetch when period, limit, or custom dates change
     selectedPeriod; topLimit; customFrom; customTo;
     loadTopProducts();
+  });
+
+  $effect(() => {
+    chartPeriod; chartGroupBy; chartCustomFrom; chartCustomTo;
+    loadChartData();
   });
 
   function sortedProducts(): TopSellingProduct[] {
@@ -85,6 +114,86 @@
     return (val / max) * 100;
   }
 
+  // ─── Chart computed helpers ────────────────────────────
+  function chartMaxSales(): number {
+    if (chartData.length === 0) return 1;
+    const m = Math.max(...chartData.map(d => d.total_sales));
+    if (m === 0) return 1;
+    const mag = Math.pow(10, Math.floor(Math.log10(m)));
+    return Math.ceil(m / mag) * mag;
+  }
+
+  function gridLines(): number[] {
+    const max = chartMaxSales();
+    const step = max / 4;
+    return [0, step, step * 2, step * 3, max];
+  }
+
+  function barX(i: number): number {
+    if (chartData.length === 0) return 0;
+    const gap = Math.min(8, INNER_W / chartData.length * 0.2);
+    const bw = (INNER_W - gap * (chartData.length + 1)) / chartData.length;
+    return PAD.left + gap + i * (bw + gap);
+  }
+
+  function chartBarWidth(): number {
+    if (chartData.length === 0) return 0;
+    const gap = Math.min(8, INNER_W / chartData.length * 0.2);
+    return Math.max(2, (INNER_W - gap * (chartData.length + 1)) / chartData.length);
+  }
+
+  function barHeight(d: SalesChartDataPoint): number {
+    const max = chartMaxSales();
+    return (d.total_sales / max) * INNER_H;
+  }
+
+  function barY(d: SalesChartDataPoint): number {
+    return PAD.top + INNER_H - barHeight(d);
+  }
+
+  function trendPoints(): string {
+    if (chartData.length < 2) return '';
+    const bw = chartBarWidth();
+    return chartData.map((d, i) => {
+      const x = barX(i) + bw / 2;
+      const y = barY(d);
+      return `${x},${y}`;
+    }).join(' ');
+  }
+
+  function chartTotal(): number {
+    return chartData.reduce((s, d) => s + d.total_sales, 0);
+  }
+
+  function chartAvg(): number {
+    if (chartData.length === 0) return 0;
+    return chartTotal() / chartData.length;
+  }
+
+  function chartBestLabel(): string {
+    if (chartData.length === 0) return '-';
+    const best = chartData.reduce((a, b) => a.total_sales > b.total_sales ? a : b);
+    return formatChartLabel(best.label);
+  }
+
+  function chartTotalTransactions(): number {
+    return chartData.reduce((s, d) => s + d.transaction_count, 0);
+  }
+
+  function formatChartLabel(label: string): string {
+    if (label.includes('-W')) return `Sem ${label.split('-W')[1]}`;
+    if (/^\d{4}-\d{2}$/.test(label)) {
+      const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+      const [, m] = label.split('-');
+      return `${months[parseInt(m) - 1]}`;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(label)) {
+      const parts = label.split('-');
+      return `${parts[2]}/${parts[1]}`;
+    }
+    return label;
+  }
+
   onMount(async () => {
     try {
       stats = await getDashboardStats();
@@ -93,6 +202,11 @@
   });
 
   function fmt(n: number) { return `Bs ${n.toFixed(2)}`; }
+  function fmtShort(n: number): string {
+    if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+    if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
+    return n.toFixed(0);
+  }
 </script>
 
 <div class="page">
@@ -108,6 +222,167 @@
     <div class="stat-card"><div class="stat-icon blue">🧾</div><div class="stat-content"><div class="stat-value">{stats.total_transactions_today}</div><div class="stat-label">Transacciones</div></div></div>
     <div class="stat-card"><div class="stat-icon yellow">⚠️</div><div class="stat-content"><div class="stat-value">{stats.low_stock_count}</div><div class="stat-label">Bajo stock</div></div></div>
     <div class="stat-card"><div class="stat-icon red">⏰</div><div class="stat-content"><div class="stat-value">{stats.expiring_soon_count}</div><div class="stat-label">Por vencer</div></div></div>
+  </div>
+
+  <!-- ─── Sales Chart ──────────────────────────────────── -->
+  <div class="card" style="margin-bottom: var(--space-2xl);">
+    <div class="top-header">
+      <h3 style="font-weight: 700;">📈 Gráfico de ventas</h3>
+      <div class="top-controls">
+        <div class="btn-group">
+          <button class="btn btn-sm {chartGroupBy === 'day' ? 'btn-primary' : 'btn-ghost'}" onclick={() => chartGroupBy = 'day'}>Diario</button>
+          <button class="btn btn-sm {chartGroupBy === 'week' ? 'btn-primary' : 'btn-ghost'}" onclick={() => chartGroupBy = 'week'}>Semanal</button>
+          <button class="btn btn-sm {chartGroupBy === 'month' ? 'btn-primary' : 'btn-ghost'}" onclick={() => chartGroupBy = 'month'}>Mensual</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="period-bar">
+      <div class="period-presets">
+        {#each [
+          { key: 'today', label: 'Hoy' },
+          { key: 'week', label: 'Esta semana' },
+          { key: 'month', label: 'Este mes' },
+          { key: 'last_month', label: 'Mes anterior' },
+          { key: 'all', label: 'Todo' },
+          { key: 'custom', label: 'Personalizado' },
+        ] as preset}
+          <button
+            class="btn btn-sm {chartPeriod === preset.key ? 'btn-primary' : 'btn-ghost'}"
+            onclick={() => chartPeriod = preset.key as PeriodPreset}
+          >{preset.label}</button>
+        {/each}
+      </div>
+      {#if chartPeriod === 'custom'}
+        <div class="custom-dates">
+          <input type="date" class="input input-sm" bind:value={chartCustomFrom} />
+          <span style="color: var(--text-muted);">—</span>
+          <input type="date" class="input input-sm" bind:value={chartCustomTo} />
+        </div>
+      {/if}
+    </div>
+
+    {#if chartLoading}
+      <div class="top-empty">
+        <span class="text-muted">Cargando...</span>
+      </div>
+    {:else if chartData.length === 0}
+      <div class="top-empty">
+        <span style="font-size: 2rem;">📦</span>
+        <span class="text-muted">No hay datos de ventas para este período</span>
+      </div>
+    {:else}
+      <div class="chart-container">
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <svg viewBox="0 0 {CHART_W} {CHART_H}" class="chart-svg" onmouseleave={() => hoveredBar = null}>
+          <defs>
+            <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#8b5cf6" />
+              <stop offset="100%" stop-color="#3b82f6" />
+            </linearGradient>
+            <linearGradient id="barGradHover" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#a78bfa" />
+              <stop offset="100%" stop-color="#60a5fa" />
+            </linearGradient>
+          </defs>
+
+          <!-- Grid lines -->
+          {#each gridLines() as gl}
+            <line
+              x1={PAD.left} y1={PAD.top + INNER_H - (gl / chartMaxSales()) * INNER_H}
+              x2={PAD.left + INNER_W} y2={PAD.top + INNER_H - (gl / chartMaxSales()) * INNER_H}
+              class="chart-grid"
+            />
+            <text
+              x={PAD.left - 10}
+              y={PAD.top + INNER_H - (gl / chartMaxSales()) * INNER_H + 4}
+              class="chart-label-y"
+            >{fmtShort(gl)}</text>
+          {/each}
+
+          <!-- Bars -->
+          {#each chartData as d, i}
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <rect
+              x={barX(i)}
+              y={barY(d)}
+              width={chartBarWidth()}
+              height={Math.max(0, barHeight(d))}
+              rx="3"
+              fill={hoveredBar === i ? 'url(#barGradHover)' : 'url(#barGrad)'}
+              class="chart-bar"
+              onmouseenter={() => hoveredBar = i}
+            />
+            <!-- X-axis label -->
+            {#if chartData.length <= 31 || i % Math.ceil(chartData.length / 20) === 0}
+              <text
+                x={barX(i) + chartBarWidth() / 2}
+                y={PAD.top + INNER_H + 18}
+                class="chart-label-x"
+                transform="rotate(-45, {barX(i) + chartBarWidth() / 2}, {PAD.top + INNER_H + 18})"
+              >{formatChartLabel(d.label)}</text>
+            {/if}
+          {/each}
+
+          <!-- Trend line -->
+          {#if chartData.length >= 2}
+            <polyline
+              points={trendPoints()}
+              class="chart-trend"
+            />
+            {#each chartData as d, i}
+              <circle
+                cx={barX(i) + chartBarWidth() / 2}
+                cy={barY(d)}
+                r={hoveredBar === i ? 5 : 3}
+                class="chart-trend-dot"
+              />
+            {/each}
+          {/if}
+
+          <!-- Hover tooltip -->
+          {#if hoveredBar !== null && chartData[hoveredBar]}
+            {@const d = chartData[hoveredBar]}
+            {@const tx = Math.min(Math.max(barX(hoveredBar) + chartBarWidth() / 2, PAD.left + 70), CHART_W - PAD.right - 70)}
+            {@const ty = barY(d) - 12}
+            <rect
+              x={tx - 70}
+              y={ty - 32}
+              width="140"
+              height="36"
+              rx="6"
+              class="chart-tooltip-bg"
+            />
+            <text x={tx} y={ty - 14} class="chart-tooltip-text">
+              {fmt(d.total_sales)}
+            </text>
+            <text x={tx} y={ty} class="chart-tooltip-sub">
+              {d.transaction_count} transacciones
+            </text>
+          {/if}
+        </svg>
+      </div>
+
+      <!-- Chart summary -->
+      <div class="chart-summary">
+        <div class="chart-stat">
+          <span class="chart-stat-value">{fmt(chartTotal())}</span>
+          <span class="chart-stat-label">Total período</span>
+        </div>
+        <div class="chart-stat">
+          <span class="chart-stat-value">{fmt(chartAvg())}</span>
+          <span class="chart-stat-label">Promedio</span>
+        </div>
+        <div class="chart-stat">
+          <span class="chart-stat-value">{chartTotalTransactions()}</span>
+          <span class="chart-stat-label">Transacciones</span>
+        </div>
+        <div class="chart-stat">
+          <span class="chart-stat-value">{chartBestLabel()}</span>
+          <span class="chart-stat-label">Mejor período</span>
+        </div>
+      </div>
+    {/if}
   </div>
 
   <!-- ─── Top Selling Products ──────────────────────────── -->
@@ -210,6 +485,98 @@
 </div>
 
 <style>
+  /* ─── Chart styles ──────────────────────────────────── */
+  .chart-container {
+    width: 100%;
+    overflow-x: auto;
+  }
+  .chart-svg {
+    width: 100%;
+    height: auto;
+    min-height: 280px;
+  }
+  .chart-grid {
+    stroke: var(--border-primary);
+    stroke-width: 0.5;
+    stroke-dasharray: 4, 4;
+  }
+  .chart-label-y {
+    fill: var(--text-muted);
+    font-size: 11px;
+    text-anchor: end;
+    font-family: 'Inter', sans-serif;
+  }
+  .chart-label-x {
+    fill: var(--text-muted);
+    font-size: 10px;
+    text-anchor: end;
+    font-family: 'Inter', sans-serif;
+  }
+  .chart-bar {
+    transition: opacity 0.15s;
+    cursor: pointer;
+  }
+  .chart-bar:hover {
+    opacity: 0.9;
+  }
+  .chart-trend {
+    fill: none;
+    stroke: #10b981;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .chart-trend-dot {
+    fill: #10b981;
+    stroke: var(--bg-primary);
+    stroke-width: 2;
+    transition: r 0.15s;
+  }
+  .chart-tooltip-bg {
+    fill: var(--bg-tertiary);
+    stroke: var(--border-primary);
+    stroke-width: 1;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+  }
+  .chart-tooltip-text {
+    fill: var(--text-primary);
+    font-size: 12px;
+    font-weight: 700;
+    text-anchor: middle;
+    font-family: 'Inter', sans-serif;
+  }
+  .chart-tooltip-sub {
+    fill: var(--text-muted);
+    font-size: 10px;
+    text-anchor: middle;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .chart-summary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-md);
+    margin-top: var(--space-lg);
+    padding-top: var(--space-lg);
+    border-top: 1px solid var(--border-primary);
+  }
+  .chart-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .chart-stat-value {
+    font-weight: 700;
+    font-size: var(--font-size-md);
+    color: var(--text-primary);
+  }
+  .chart-stat-label {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+  }
+
+  /* ─── Top Products styles ───────────────────────────── */
   .top-header {
     display: flex;
     justify-content: space-between;
