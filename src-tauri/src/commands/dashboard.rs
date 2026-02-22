@@ -50,3 +50,51 @@ pub fn get_dashboard_stats(db: State<'_, Database>) -> Result<DashboardStats, St
         expiring_soon_count,
     })
 }
+
+#[tauri::command]
+pub fn get_top_selling_products(
+    db: State<'_, Database>,
+    date_from: Option<String>,
+    date_to: Option<String>,
+    limit: Option<i64>,
+) -> Result<Vec<TopSellingProduct>, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let actual_limit = limit.unwrap_or(10);
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT si.product_id, si.product_name,
+                    SUM(si.quantity) as total_quantity,
+                    SUM(si.total) as total_revenue
+             FROM sale_items si
+             JOIN sales s ON s.id = si.sale_id
+             WHERE s.status = 'completed'
+               AND (?1 IS NULL OR DATE(s.created_at) >= ?1)
+               AND (?2 IS NULL OR DATE(s.created_at) <= ?2)
+             GROUP BY si.product_id, si.product_name
+             ORDER BY total_quantity DESC
+             LIMIT ?3",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map(
+            rusqlite::params![date_from, date_to, actual_limit],
+            |row| {
+                Ok(TopSellingProduct {
+                    product_id: row.get(0)?,
+                    product_name: row.get(1)?,
+                    total_quantity: row.get(2)?,
+                    total_revenue: row.get(3)?,
+                })
+            },
+        )
+        .map_err(|e| e.to_string())?;
+
+    let mut products = Vec::new();
+    for row in rows {
+        products.push(row.map_err(|e| e.to_string())?);
+    }
+
+    Ok(products)
+}

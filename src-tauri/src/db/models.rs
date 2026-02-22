@@ -266,3 +266,13 @@ pub struct ImportError {
     pub row: u32,
     pub message: String,
 }
+
+// ─── Reports ───────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TopSellingProduct {
+    pub product_id: String,
+    pub product_name: String,
+    pub total_quantity: f64,
+    pub total_revenue: f64,
+}

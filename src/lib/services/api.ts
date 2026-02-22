@@ -5,7 +5,7 @@ import type {
   Sale, SaleItem, CreateSale,
   CashRegister, CashRegisterReport,
   InventoryMovement, InventoryLot,
-  DashboardStats,
+  DashboardStats, TopSellingProduct,
   Setting, Category, CreateCategory,
   ImportResult
 } from '$lib/types';
@@ -129,6 +129,12 @@ export async function getCashRegisterReport(registerId: string): Promise<CashReg
 
 export async function getDashboardStats(): Promise<DashboardStats> {
   return invoke('get_dashboard_stats');
+}
+
+export async function getTopSellingProducts(
+  dateFrom?: string, dateTo?: string, limit?: number
+): Promise<TopSellingProduct[]> {
+  return invoke('get_top_selling_products', { dateFrom, dateTo, limit });
 }
 
 // ─── Settings ──────────────────────────────────────────

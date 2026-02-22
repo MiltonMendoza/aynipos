@@ -55,6 +55,7 @@ pub fn run() {
             commands::cash_register::get_cash_register_report,
             // Dashboard
             commands::dashboard::get_dashboard_stats,
+            commands::dashboard::get_top_selling_products,
             // Settings
             commands::settings::get_settings,
             commands::settings::update_setting,

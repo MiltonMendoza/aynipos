@@ -212,6 +212,13 @@ export interface DashboardStats {
   expiring_soon_count: number;
 }
 
+export interface TopSellingProduct {
+  product_id: string;
+  product_name: string;
+  total_quantity: number;
+  total_revenue: number;
+}
+
 // ─── Settings ──────────────────────────────────────────
 
 export interface Setting {
