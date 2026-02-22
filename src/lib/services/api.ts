@@ -5,7 +5,7 @@ import type {
   Sale, SaleItem, CreateSale,
   CashRegister, CashRegisterReport,
   InventoryMovement, InventoryLot,
-  DashboardStats, TopSellingProduct, SalesChartDataPoint, ProfitMarginProduct,
+  DashboardStats, TopSellingProduct, SalesChartDataPoint, ProfitMarginProduct, InventoryReportItem,
   Setting, Category, CreateCategory,
   ImportResult
 } from '$lib/types';
@@ -147,6 +147,10 @@ export async function getProfitMarginReport(
   dateFrom?: string, dateTo?: string
 ): Promise<ProfitMarginProduct[]> {
   return invoke('get_profit_margin_report', { dateFrom, dateTo });
+}
+
+export async function getInventoryReport(inactiveDays?: number): Promise<InventoryReportItem[]> {
+  return invoke('get_inventory_report', { inactiveDays });
 }
 
 // ─── Settings ──────────────────────────────────────────

@@ -727,6 +727,11 @@ tbody tr:hover {
   color: var(--accent-info);
 }
 
+.badge-muted {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
 /* ─── Toast / Notification ─── */
 .toast {
   position: fixed;

@@ -58,6 +58,7 @@ pub fn run() {
             commands::dashboard::get_top_selling_products,
             commands::dashboard::get_sales_chart_data,
             commands::dashboard::get_profit_margin_report,
+            commands::dashboard::get_inventory_report,
             // Settings
             commands::settings::get_settings,
             commands::settings::update_setting,

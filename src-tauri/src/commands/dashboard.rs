@@ -203,3 +203,75 @@ pub fn get_profit_margin_report(
 
     Ok(products)
 }
+
+#[tauri::command]
+pub fn get_inventory_report(
+    db: State<'_, Database>,
+    inactive_days: Option<i64>,
+) -> Result<Vec<InventoryReportItem>, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+
+    let mut sql = String::from(
+        "SELECT p.id, p.name, p.sku,
+                c.name as category_name,
+                COALESCE(inv.total_stock, 0) as current_stock,
+                p.purchase_price,
+                p.sale_price,
+                COALESCE(inv.total_stock, 0) * p.purchase_price as stock_cost_value,
+                COALESCE(inv.total_stock, 0) * p.sale_price as stock_sale_value,
+                lm.last_date as last_movement_date,
+                CASE WHEN lm.last_date IS NOT NULL
+                     THEN CAST(julianday('now') - julianday(lm.last_date) AS INTEGER)
+                     ELSE NULL
+                END as days_without_movement
+         FROM products p
+         LEFT JOIN (
+             SELECT product_id, SUM(quantity) as total_stock
+             FROM inventory
+             GROUP BY product_id
+         ) inv ON inv.product_id = p.id
+         LEFT JOIN categories c ON c.id = p.category_id
+         LEFT JOIN (
+             SELECT product_id, MAX(created_at) as last_date
+             FROM inventory_movements
+             GROUP BY product_id
+         ) lm ON lm.product_id = p.id
+         WHERE p.is_active = 1"
+    );
+
+    if let Some(days) = inactive_days {
+        sql.push_str(&format!(
+            " AND (lm.last_date IS NULL OR CAST(julianday('now') - julianday(lm.last_date) AS INTEGER) >= {})",
+            days
+        ));
+    }
+
+    sql.push_str(" ORDER BY stock_cost_value DESC");
+
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(InventoryReportItem {
+                product_id: row.get(0)?,
+                product_name: row.get(1)?,
+                sku: row.get(2)?,
+                category_name: row.get(3)?,
+                current_stock: row.get(4)?,
+                purchase_price: row.get(5)?,
+                sale_price: row.get(6)?,
+                stock_cost_value: row.get(7)?,
+                stock_sale_value: row.get(8)?,
+                last_movement_date: row.get(9)?,
+                days_without_movement: row.get(10)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut items = Vec::new();
+    for row in rows {
+        items.push(row.map_err(|e| e.to_string())?);
+    }
+
+    Ok(items)
+}

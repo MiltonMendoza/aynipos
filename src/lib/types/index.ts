@@ -237,6 +237,20 @@ export interface ProfitMarginProduct {
   margin_percent: number;
 }
 
+export interface InventoryReportItem {
+  product_id: string;
+  product_name: string;
+  sku: string;
+  category_name: string | null;
+  current_stock: number;
+  purchase_price: number;
+  sale_price: number;
+  stock_cost_value: number;
+  stock_sale_value: number;
+  last_movement_date: string | null;
+  days_without_movement: number | null;
+}
+
 // ─── Settings ──────────────────────────────────────────
 
 export interface Setting {

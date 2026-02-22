@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getDashboardStats, getSales, getTopSellingProducts, getSalesChartData, getProfitMarginReport } from '$lib/services/api';
-  import type { DashboardStats, Sale, TopSellingProduct, SalesChartDataPoint, ProfitMarginProduct } from '$lib/types';
+  import { getDashboardStats, getSales, getTopSellingProducts, getSalesChartData, getProfitMarginReport, getInventoryReport } from '$lib/services/api';
+  import type { DashboardStats, Sale, TopSellingProduct, SalesChartDataPoint, ProfitMarginProduct, InventoryReportItem } from '$lib/types';
 
   let stats: DashboardStats = $state({
     total_sales_today: 0, total_transactions_today: 0, total_products: 0,
@@ -37,6 +37,14 @@
   let marginCustomTo = $state('');
   let marginSortCol: 'product_name' | 'purchase_price' | 'avg_sale_price' | 'total_quantity' | 'total_revenue' | 'total_cost' | 'gross_profit' | 'margin_percent' = $state('gross_profit');
   let marginSortAsc = $state(false);
+
+  // ─── Inventory Report ──────────────────────────────────
+  let invItems: InventoryReportItem[] = $state([]);
+  let invLoading = $state(false);
+  let invInactiveDays: number | undefined = $state(undefined);
+  type InvSortCol = 'product_name' | 'sku' | 'category_name' | 'current_stock' | 'purchase_price' | 'sale_price' | 'stock_cost_value' | 'stock_sale_value' | 'days_without_movement';
+  let invSortCol: InvSortCol = $state('stock_cost_value');
+  let invSortAsc = $state(false);
 
   // ─── Chart constants ───────────────────────────────────
   const CHART_W = 800;
@@ -113,6 +121,48 @@
     marginPeriod; marginCustomFrom; marginCustomTo;
     loadMarginData();
   });
+
+  async function loadInventoryReport() {
+    invLoading = true;
+    try {
+      invItems = await getInventoryReport(invInactiveDays);
+    } catch { invItems = []; }
+    invLoading = false;
+  }
+
+  $effect(() => {
+    invInactiveDays;
+    loadInventoryReport();
+  });
+
+  function sortedInvItems(): InventoryReportItem[] {
+    return [...invItems].sort((a, b) => {
+      const va = a[invSortCol];
+      const vb = b[invSortCol];
+      if (va === null && vb === null) return 0;
+      if (va === null) return 1;
+      if (vb === null) return -1;
+      if (typeof va === 'string') return invSortAsc ? (va as string).localeCompare(vb as string) : (vb as string).localeCompare(va as string);
+      return invSortAsc ? (va as number) - (vb as number) : (vb as number) - (va as number);
+    });
+  }
+
+  function toggleInvSort(col: InvSortCol) {
+    if (invSortCol === col) invSortAsc = !invSortAsc;
+    else { invSortCol = col; invSortAsc = false; }
+  }
+
+  function invTotalCostValue() { return invItems.reduce((s, p) => s + p.stock_cost_value, 0); }
+  function invTotalSaleValue() { return invItems.reduce((s, p) => s + p.stock_sale_value, 0); }
+  function invTotalStock() { return invItems.reduce((s, p) => s + p.current_stock, 0); }
+  function invInactiveCount() { return invItems.filter(p => p.days_without_movement !== null && p.days_without_movement >= 30).length; }
+
+  function inactiveBadgeClass(days: number | null): string {
+    if (days === null) return 'badge-muted';
+    if (days >= 90) return 'badge-danger';
+    if (days >= 30) return 'badge-warning';
+    return 'badge-success';
+  }
 
   function sortedMarginProducts(): ProfitMarginProduct[] {
     return [...marginProducts].sort((a, b) => {
@@ -636,6 +686,120 @@
               <td class="text-right">
                 <span class="badge {marginBadgeClass(marginAvgPercent())}">{marginAvgPercent().toFixed(1)}%</span>
               </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    {/if}
+  </div>
+
+  <!-- ─── Inventory Report ──────────────────────────────── -->
+  <div class="card" style="margin-bottom: var(--space-2xl);">
+    <div class="top-header">
+      <h3 style="font-weight: 700;">📦 Reporte de Inventario</h3>
+      <div class="top-controls">
+        <select class="select select-sm" onchange={(e) => {
+          const v = (e.target as HTMLSelectElement).value;
+          invInactiveDays = v === '' ? undefined : parseInt(v);
+        }}>
+          <option value="">Todos los productos</option>
+          <option value="30">Sin movimiento 30+ días</option>
+          <option value="60">Sin movimiento 60+ días</option>
+          <option value="90">Sin movimiento 90+ días</option>
+        </select>
+      </div>
+    </div>
+
+    {#if invLoading}
+      <div class="top-empty">
+        <span class="text-muted">Cargando...</span>
+      </div>
+    {:else if invItems.length === 0}
+      <div class="top-empty">
+        <span style="font-size: 2rem;">📦</span>
+        <span class="text-muted">No hay productos con los filtros seleccionados</span>
+      </div>
+    {:else}
+      <!-- Summary cards -->
+      <div class="card-grid card-grid-4" style="margin-bottom: var(--space-lg);">
+        <div class="stat-card">
+          <div class="stat-icon blue">📋</div>
+          <div class="stat-content">
+            <div class="stat-value">{invItems.length}</div>
+            <div class="stat-label">Productos</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon red">💰</div>
+          <div class="stat-content">
+            <div class="stat-value">{fmt(invTotalCostValue())}</div>
+            <div class="stat-label">Valor a costo</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon green">🏷️</div>
+          <div class="stat-content">
+            <div class="stat-value">{fmt(invTotalSaleValue())}</div>
+            <div class="stat-label">Valor a venta</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon yellow">⏳</div>
+          <div class="stat-content">
+            <div class="stat-value">{invInactiveCount()}</div>
+            <div class="stat-label">Sin movimiento 30+ d</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="table-container" style="border: none;">
+        <table>
+          <thead>
+            <tr>
+              <th class="sortable-th" onclick={() => toggleInvSort('product_name')}>Producto {invSortCol === 'product_name' ? (invSortAsc ? '↑' : '↓') : ''}</th>
+              <th class="sortable-th" onclick={() => toggleInvSort('sku')}>SKU {invSortCol === 'sku' ? (invSortAsc ? '↑' : '↓') : ''}</th>
+              <th class="sortable-th" onclick={() => toggleInvSort('category_name')}>Categoría {invSortCol === 'category_name' ? (invSortAsc ? '↑' : '↓') : ''}</th>
+              <th class="sortable-th text-right" onclick={() => toggleInvSort('current_stock')}>Stock {invSortCol === 'current_stock' ? (invSortAsc ? '↑' : '↓') : ''}</th>
+              <th class="sortable-th text-right" onclick={() => toggleInvSort('purchase_price')}>P. Compra {invSortCol === 'purchase_price' ? (invSortAsc ? '↑' : '↓') : ''}</th>
+              <th class="sortable-th text-right" onclick={() => toggleInvSort('sale_price')}>P. Venta {invSortCol === 'sale_price' ? (invSortAsc ? '↑' : '↓') : ''}</th>
+              <th class="sortable-th text-right" onclick={() => toggleInvSort('stock_cost_value')}>Valor Costo {invSortCol === 'stock_cost_value' ? (invSortAsc ? '↑' : '↓') : ''}</th>
+              <th class="sortable-th text-right" onclick={() => toggleInvSort('stock_sale_value')}>Valor Venta {invSortCol === 'stock_sale_value' ? (invSortAsc ? '↑' : '↓') : ''}</th>
+              <th class="sortable-th text-right" onclick={() => toggleInvSort('days_without_movement')}>Inactividad {invSortCol === 'days_without_movement' ? (invSortAsc ? '↑' : '↓') : ''}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each sortedInvItems() as item}
+              <tr>
+                <td style="font-weight: 600;">{item.product_name}</td>
+                <td class="text-muted">{item.sku}</td>
+                <td>{item.category_name || '—'}</td>
+                <td class="text-right">{item.current_stock.toFixed(0)}</td>
+                <td class="text-right">{fmt(item.purchase_price)}</td>
+                <td class="text-right">{fmt(item.sale_price)}</td>
+                <td class="text-right" style="font-weight: 600;">{fmt(item.stock_cost_value)}</td>
+                <td class="text-right" style="font-weight: 600;">{fmt(item.stock_sale_value)}</td>
+                <td class="text-right">
+                  {#if item.days_without_movement !== null}
+                    <span class="badge {inactiveBadgeClass(item.days_without_movement)}">{item.days_without_movement}d</span>
+                  {:else}
+                    <span class="badge badge-muted">Sin mov.</span>
+                  {/if}
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+          <tfoot>
+            <tr style="font-weight: 700; border-top: 2px solid var(--border-primary);">
+              <td>Total</td>
+              <td></td>
+              <td></td>
+              <td class="text-right">{invTotalStock().toFixed(0)}</td>
+              <td></td>
+              <td></td>
+              <td class="text-right">{fmt(invTotalCostValue())}</td>
+              <td class="text-right">{fmt(invTotalSaleValue())}</td>
+              <td></td>
             </tr>
           </tfoot>
         </table>

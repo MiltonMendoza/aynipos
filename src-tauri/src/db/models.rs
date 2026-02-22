@@ -296,3 +296,18 @@ pub struct ProfitMarginProduct {
     pub gross_profit: f64,
     pub margin_percent: f64,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InventoryReportItem {
+    pub product_id: String,
+    pub product_name: String,
+    pub sku: String,
+    pub category_name: Option<String>,
+    pub current_stock: f64,
+    pub purchase_price: f64,
+    pub sale_price: f64,
+    pub stock_cost_value: f64,
+    pub stock_sale_value: f64,
+    pub last_movement_date: Option<String>,
+    pub days_without_movement: Option<i64>,
+}
