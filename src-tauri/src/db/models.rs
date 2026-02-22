@@ -115,10 +115,13 @@ pub struct InventoryItem {
 pub struct InventoryMovement {
     pub id: String,
     pub product_id: String,
+    pub product_name: String,
     pub movement_type: String,
     pub quantity: f64,
     pub reference_id: Option<String>,
     pub notes: Option<String>,
+    pub lot_number: Option<String>,
+    pub expiry_date: Option<String>,
     pub created_at: Option<String>,
 }
 

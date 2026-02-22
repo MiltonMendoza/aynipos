@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { ProductWithStock, Category, CreateProduct, UpdateProduct, ImportResult, InventoryLot } from '$lib/types';
-  import { getInventory, adjustInventory, getCategories, createProduct, createCategory, updateProduct, exportProductsCsv, importProductsCsv, getProductLots, deleteLot } from '$lib/services/api';
+  import type { ProductWithStock, Category, CreateProduct, UpdateProduct, ImportResult, InventoryLot, InventoryMovement } from '$lib/types';
+  import { getInventory, adjustInventory, getCategories, createProduct, createCategory, updateProduct, exportProductsCsv, importProductsCsv, getProductLots, deleteLot, getInventoryMovements } from '$lib/services/api';
   import { save, open } from '@tauri-apps/plugin-dialog';
 
   let inventory: ProductWithStock[] = $state([]);
@@ -44,6 +44,12 @@
   let lotsProduct: ProductWithStock | null = $state(null);
   let lots: InventoryLot[] = $state([]);
   let lotsLoading = $state(false);
+
+  // Movement history
+  let showMovements = $state(false);
+  let movementsProduct: ProductWithStock | null = $state(null);
+  let movements: InventoryMovement[] = $state([]);
+  let movementsLoading = $state(false);
 
   onMount(loadInventory);
 
@@ -298,12 +304,46 @@
     }
   }
 
+  function formatDateTime(date: string | null): string {
+    if (!date) return '—';
+    try {
+      const d = new Date(date);
+      return d.toLocaleDateString('es-BO', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return date;
+    }
+  }
+
   function expiryBadge(status: string): { label: string; class: string } {
     switch (status) {
       case 'expired': return { label: '❌ Vencido', class: 'badge-danger' };
       case 'danger': return { label: '🔴 Crítico', class: 'badge-danger' };
       case 'warning': return { label: '🟡 Por vencer', class: 'badge-warning' };
       default: return { label: '🟢 OK', class: 'badge-success' };
+    }
+  }
+
+  function movementBadge(type: string): { label: string; class: string } {
+    switch (type) {
+      case 'sale': return { label: '🔴 Venta', class: 'badge-danger' };
+      case 'purchase': return { label: '🟢 Compra', class: 'badge-success' };
+      case 'return': return { label: '🔵 Devolución', class: 'badge-info' };
+      case 'adjustment': return { label: '🟡 Ajuste', class: 'badge-warning' };
+      default: return { label: type, class: 'badge' };
+    }
+  }
+
+  async function openMovements(ps: ProductWithStock) {
+    movementsProduct = ps;
+    movementsLoading = true;
+    showMovements = true;
+    try {
+      movements = await getInventoryMovements(ps.product.id, 100);
+    } catch (e) {
+      alert('Error al cargar historial: ' + e);
+      movements = [];
+    } finally {
+      movementsLoading = false;
     }
   }
 
@@ -386,6 +426,7 @@
                 <button class="btn btn-ghost btn-sm" onclick={() => openEditProduct(ps)}>✏️ Editar</button>
                 <button class="btn btn-ghost btn-sm" onclick={() => openLots(ps)}>📦 Lotes</button>
                 <button class="btn btn-ghost btn-sm" onclick={() => openAdjust(ps)}>📊 Ajustar</button>
+                <button class="btn btn-ghost btn-sm" onclick={() => openMovements(ps)}>📜 Historial</button>
               </td>
             </tr>
           {/each}
@@ -674,6 +715,75 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-primary" onclick={() => showLots = false}>Cerrar</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Movement History Modal -->
+{#if showMovements && movementsProduct}
+  <div class="modal-overlay" onclick={() => showMovements = false}>
+    <div class="modal modal-lg" onclick={(e) => e.stopPropagation()} style="max-width: 900px;">
+      <div class="modal-header">
+        <h3 class="modal-title">📜 Historial — {movementsProduct.product.name}</h3>
+        <button class="btn btn-ghost btn-sm" onclick={() => showMovements = false}>✕</button>
+      </div>
+      <div class="modal-body">
+        {#if movementsLoading}
+          <div class="text-center text-muted" style="padding: var(--space-2xl);">Cargando historial...</div>
+        {:else if movements.length === 0}
+          <div class="text-center text-muted" style="padding: var(--space-2xl);">
+            <div style="font-size: var(--font-size-2xl); margin-bottom: var(--space-md);">📭</div>
+            <div>No hay movimientos registrados para este producto.</div>
+          </div>
+        {:else}
+          {@const totalIn = movements.filter(m => m.quantity > 0).reduce((s, m) => s + m.quantity, 0)}
+          {@const totalOut = movements.filter(m => m.quantity < 0).reduce((s, m) => s + Math.abs(m.quantity), 0)}
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-lg); margin-bottom: var(--space-xl);">
+            <div class="stat-card" style="text-align: center;">
+              <div style="font-size: var(--font-size-2xl); font-weight: 700; color: var(--accent-success);">+{totalIn}</div>
+              <div class="text-sm text-muted">Entradas</div>
+            </div>
+            <div class="stat-card" style="text-align: center;">
+              <div style="font-size: var(--font-size-2xl); font-weight: 700; color: var(--accent-danger);">-{totalOut}</div>
+              <div class="text-sm text-muted">Salidas</div>
+            </div>
+            <div class="stat-card" style="text-align: center;">
+              <div style="font-size: var(--font-size-2xl); font-weight: 700; color: var(--accent-primary);">{movements.length}</div>
+              <div class="text-sm text-muted">Total movimientos</div>
+            </div>
+          </div>
+          <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Tipo</th>
+                  <th>Cantidad</th>
+                  <th>Lote</th>
+                  <th>Notas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each movements as mov}
+                  {@const badge = movementBadge(mov.movement_type)}
+                  <tr>
+                    <td class="text-sm">{formatDateTime(mov.created_at)}</td>
+                    <td><span class="badge {badge.class}">{badge.label}</span></td>
+                    <td style="font-weight: 700; color: {mov.quantity >= 0 ? 'var(--accent-success)' : 'var(--accent-danger)'};">
+                      {mov.quantity >= 0 ? '+' : ''}{mov.quantity}
+                    </td>
+                    <td class="text-sm text-muted">{mov.lot_number || '—'}</td>
+                    <td class="text-sm text-muted">{mov.notes || '—'}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        {/if}
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick={() => showMovements = false}>Cerrar</button>
       </div>
     </div>
   </div>

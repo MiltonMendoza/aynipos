@@ -221,15 +221,22 @@ pub fn get_inventory_movements(db: State<'_, Database>, product_id: Option<Strin
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let max = limit.unwrap_or(50);
 
-    let mut query = String::from("SELECT * FROM inventory_movements WHERE 1=1");
+    let mut query = String::from(
+        "SELECT im.id, im.product_id, COALESCE(p.name, 'Producto eliminado') as product_name,
+                im.movement_type, im.quantity, im.reference_id, im.notes,
+                im.lot_number, im.expiry_date, im.created_at
+         FROM inventory_movements im
+         LEFT JOIN products p ON p.id = im.product_id
+         WHERE 1=1"
+    );
     let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
 
     if let Some(ref pid) = product_id {
-        query.push_str(" AND product_id = ?1");
+        query.push_str(" AND im.product_id = ?1");
         params.push(Box::new(pid.clone()));
     }
 
-    query.push_str(&format!(" ORDER BY created_at DESC LIMIT {}", max));
+    query.push_str(&format!(" ORDER BY im.created_at DESC LIMIT {}", max));
 
     let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
     let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
@@ -238,11 +245,14 @@ pub fn get_inventory_movements(db: State<'_, Database>, product_id: Option<Strin
         Ok(InventoryMovement {
             id: row.get(0)?,
             product_id: row.get(1)?,
-            movement_type: row.get(2)?,
-            quantity: row.get(3)?,
-            reference_id: row.get(4)?,
-            notes: row.get(5)?,
-            created_at: row.get(6)?,
+            product_name: row.get(2)?,
+            movement_type: row.get(3)?,
+            quantity: row.get(4)?,
+            reference_id: row.get(5)?,
+            notes: row.get(6)?,
+            lot_number: row.get(7)?,
+            expiry_date: row.get(8)?,
+            created_at: row.get(9)?,
         })
     }).map_err(|e| e.to_string())?;
 

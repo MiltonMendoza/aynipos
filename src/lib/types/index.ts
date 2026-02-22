@@ -163,10 +163,13 @@ export interface CashRegister {
 export interface InventoryMovement {
   id: string;
   product_id: string;
+  product_name: string;
   movement_type: string;
   quantity: number;
   reference_id: string | null;
   notes: string | null;
+  lot_number: string | null;
+  expiry_date: string | null;
   created_at: string | null;
 }
 
