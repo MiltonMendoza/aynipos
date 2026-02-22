@@ -199,6 +199,12 @@ function buildCashReportHTML(report: CashRegisterReport, biz: BusinessInfo): str
       <span class="label">Cierre:</span>
       <span>${formatDate(r.closed_at)}</span>
     </div>
+    ${r.user_name ? `
+    <div class="info-row" style="margin-top: 4px;">
+      <span class="label">👤 Cajero:</span>
+      <span style="font-weight: 700;">${r.user_name}</span>
+    </div>
+    ` : ''}
 
     <hr class="divider">
 

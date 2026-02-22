@@ -4,7 +4,7 @@ use tauri::State;
 use uuid::Uuid;
 
 #[tauri::command]
-pub fn open_cash_register(db: State<'_, Database>, opening_amount: f64) -> Result<CashRegister, String> {
+pub fn open_cash_register(db: State<'_, Database>, opening_amount: f64, user_id: String) -> Result<CashRegister, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
     // Check if there's already an open register
@@ -18,12 +18,19 @@ pub fn open_cash_register(db: State<'_, Database>, opening_amount: f64) -> Resul
         return Err("Ya hay una caja abierta. Ciérrela antes de abrir una nueva.".to_string());
     }
 
+    // Get user name
+    let user_name: String = conn.query_row(
+        "SELECT name FROM users WHERE id = ?1",
+        [&user_id],
+        |row| row.get(0),
+    ).map_err(|_| "Usuario no encontrado.".to_string())?;
+
     let id = Uuid::new_v4().to_string();
     let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     conn.execute(
-        "INSERT INTO cash_registers (id, opened_at, opening_amount) VALUES (?1, ?2, ?3)",
-        rusqlite::params![&id, &now, opening_amount],
+        "INSERT INTO cash_registers (id, opened_at, opening_amount, user_id) VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params![&id, &now, opening_amount, &user_id],
     ).map_err(|e| e.to_string())?;
 
     Ok(CashRegister {
@@ -34,7 +41,8 @@ pub fn open_cash_register(db: State<'_, Database>, opening_amount: f64) -> Resul
         closing_amount: None,
         expected_amount: None,
         notes: None,
-        user_id: None,
+        user_id: Some(user_id),
+        user_name: Some(user_name),
     })
 }
 
@@ -50,10 +58,12 @@ pub fn close_cash_register(db: State<'_, Database>, closing_amount: f64, notes: 
     ).map_err(|_| "No hay caja abierta.".to_string())?;
 
     // Calculate expected amount
-    let opening_amount: f64 = conn.query_row(
-        "SELECT opening_amount FROM cash_registers WHERE id = ?1",
+    let (opening_amount, user_id, user_name): (f64, Option<String>, Option<String>) = conn.query_row(
+        "SELECT cr.opening_amount, cr.user_id, u.name
+         FROM cash_registers cr LEFT JOIN users u ON cr.user_id = u.id
+         WHERE cr.id = ?1",
         [&register_id],
-        |row| row.get(0),
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
     ).map_err(|e| e.to_string())?;
 
     let sales_total: f64 = conn.query_row(
@@ -78,7 +88,8 @@ pub fn close_cash_register(db: State<'_, Database>, closing_amount: f64, notes: 
         closing_amount: Some(closing_amount),
         expected_amount: Some(expected),
         notes,
-        user_id: None,
+        user_id,
+        user_name,
     })
 }
 
@@ -87,7 +98,10 @@ pub fn get_current_cash_register(db: State<'_, Database>) -> Result<Option<CashR
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
     let result = conn.query_row(
-        "SELECT * FROM cash_registers WHERE closed_at IS NULL ORDER BY opened_at DESC LIMIT 1",
+        "SELECT cr.id, cr.opened_at, cr.closed_at, cr.opening_amount, cr.closing_amount,
+                cr.expected_amount, cr.notes, cr.user_id, u.name
+         FROM cash_registers cr LEFT JOIN users u ON cr.user_id = u.id
+         WHERE cr.closed_at IS NULL ORDER BY cr.opened_at DESC LIMIT 1",
         [],
         |row| {
             Ok(CashRegister {
@@ -99,6 +113,7 @@ pub fn get_current_cash_register(db: State<'_, Database>) -> Result<Option<CashR
                 expected_amount: row.get(5)?,
                 notes: row.get(6)?,
                 user_id: row.get(7)?,
+                user_name: row.get(8)?,
             })
         },
     );
@@ -114,9 +129,12 @@ pub fn get_current_cash_register(db: State<'_, Database>) -> Result<Option<CashR
 pub fn get_cash_register_report(db: State<'_, Database>, register_id: String) -> Result<CashRegisterReport, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
-    // Get the cash register
+    // Get the cash register with user name
     let register = conn.query_row(
-        "SELECT * FROM cash_registers WHERE id = ?1",
+        "SELECT cr.id, cr.opened_at, cr.closed_at, cr.opening_amount, cr.closing_amount,
+                cr.expected_amount, cr.notes, cr.user_id, u.name
+         FROM cash_registers cr LEFT JOIN users u ON cr.user_id = u.id
+         WHERE cr.id = ?1",
         [&register_id],
         |row| {
             Ok(CashRegister {
@@ -128,6 +146,7 @@ pub fn get_cash_register_report(db: State<'_, Database>, register_id: String) ->
                 expected_amount: row.get(5)?,
                 notes: row.get(6)?,
                 user_id: row.get(7)?,
+                user_name: row.get(8)?,
             })
         },
     ).map_err(|_| "Caja no encontrada.".to_string())?;
@@ -204,4 +223,89 @@ pub fn get_cash_register_report(db: State<'_, Database>, register_id: String) ->
         count_mixed,
         difference,
     })
+}
+
+#[tauri::command]
+pub fn get_cash_register_history(db: State<'_, Database>, user_id: Option<String>, limit: Option<i64>) -> Result<Vec<CashRegisterReport>, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+
+    let lim = limit.unwrap_or(20);
+
+    let query = if user_id.is_some() {
+        "SELECT cr.id FROM cash_registers cr WHERE cr.closed_at IS NOT NULL AND cr.user_id = ?1 ORDER BY cr.opened_at DESC LIMIT ?2"
+    } else {
+        "SELECT cr.id FROM cash_registers cr WHERE cr.closed_at IS NOT NULL ORDER BY cr.opened_at DESC LIMIT ?1"
+    };
+
+    let ids: Vec<String> = if let Some(ref uid) = user_id {
+        let mut stmt = conn.prepare(query).map_err(|e| e.to_string())?;
+        let rows = stmt.query_map(rusqlite::params![uid, lim], |row| row.get(0))
+            .map_err(|e| e.to_string())?;
+        rows.filter_map(|r| r.ok()).collect()
+    } else {
+        let mut stmt = conn.prepare(query).map_err(|e| e.to_string())?;
+        let rows = stmt.query_map(rusqlite::params![lim], |row| row.get(0))
+            .map_err(|e| e.to_string())?;
+        rows.filter_map(|r| r.ok()).collect()
+    };
+
+    // Build mini-reports for each register
+    let mut reports = Vec::new();
+    for reg_id in ids {
+        let register = conn.query_row(
+            "SELECT cr.id, cr.opened_at, cr.closed_at, cr.opening_amount, cr.closing_amount,
+                    cr.expected_amount, cr.notes, cr.user_id, u.name
+             FROM cash_registers cr LEFT JOIN users u ON cr.user_id = u.id
+             WHERE cr.id = ?1",
+            [&reg_id],
+            |row| {
+                Ok(CashRegister {
+                    id: row.get(0)?,
+                    opened_at: row.get(1)?,
+                    closed_at: row.get(2)?,
+                    opening_amount: row.get(3)?,
+                    closing_amount: row.get(4)?,
+                    expected_amount: row.get(5)?,
+                    notes: row.get(6)?,
+                    user_id: row.get(7)?,
+                    user_name: row.get(8)?,
+                })
+            },
+        ).map_err(|e| e.to_string())?;
+
+        // Sales summary for this register
+        let (total_sales, total_transactions): (f64, i64) = conn.query_row(
+            "SELECT COALESCE(SUM(total), 0), COUNT(*) FROM sales WHERE cash_register_id = ?1 AND status = 'completed'",
+            [&reg_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        ).map_err(|e| e.to_string())?;
+
+        let cancelled_transactions: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM sales WHERE cash_register_id = ?1 AND status = 'cancelled'",
+            [&reg_id],
+            |row| row.get(0),
+        ).map_err(|e| e.to_string())?;
+
+        let difference = register.closing_amount.unwrap_or(0.0) - register.expected_amount.unwrap_or(0.0);
+
+        reports.push(CashRegisterReport {
+            register,
+            total_sales,
+            total_transactions,
+            cancelled_transactions,
+            total_discount: 0.0,
+            total_tax: 0.0,
+            sales_cash: 0.0,
+            sales_card: 0.0,
+            sales_qr: 0.0,
+            sales_mixed: 0.0,
+            count_cash: 0,
+            count_card: 0,
+            count_qr: 0,
+            count_mixed: 0,
+            difference,
+        });
+    }
+
+    Ok(reports)
 }

@@ -48,6 +48,7 @@
 | 5.1 | 🔐 Login con PIN | Ingresa al sistema con un PIN numérico rápido y seguro | [Ver guía](5_1_login_pin.md) |
 | 5.2 | 🛡️ Roles y permisos | Controla quién accede a cada sección según su puesto | [Ver guía](5_2_roles_permisos.md) |
 | 5.3 | 📋 Registro de actividad | Historial detallado: quién hizo qué y cuándo | [Ver guía](5_3_registro_actividad.md) |
+| 5.4 | 👤 Cajero por turno | Cada turno de caja asociado a su cajero, con historial filtrable | [Ver guía](5_4_cajero_por_turno.md) |
 
 ---
 

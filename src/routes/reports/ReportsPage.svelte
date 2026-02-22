@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getDashboardStats, getSales, getTopSellingProducts, getSalesChartData, getProfitMarginReport, getInventoryReport, saveReportCsv, saveReportHtml } from '$lib/services/api';
-  import type { DashboardStats, Sale, TopSellingProduct, SalesChartDataPoint, ProfitMarginProduct, InventoryReportItem, User } from '$lib/types';
+  import { getDashboardStats, getSales, getTopSellingProducts, getSalesChartData, getProfitMarginReport, getInventoryReport, saveReportCsv, saveReportHtml, getCashRegisterHistory, getCashRegisterReport, getUsers, getSettings } from '$lib/services/api';
+  import type { DashboardStats, Sale, TopSellingProduct, SalesChartDataPoint, ProfitMarginProduct, InventoryReportItem, User, CashRegisterReport } from '$lib/types';
+  import { extractBusinessInfo, type BusinessInfo } from '$lib/services/receipt';
+  import { printCashReport } from '$lib/services/cashReportPrint';
   import { save } from '@tauri-apps/plugin-dialog';
   import { hasPermission } from '$lib/services/permissions';
 
@@ -50,6 +52,44 @@
   type InvSortCol = 'product_name' | 'sku' | 'category_name' | 'current_stock' | 'purchase_price' | 'sale_price' | 'stock_cost_value' | 'stock_sale_value' | 'days_without_movement';
   let invSortCol: InvSortCol = $state('stock_cost_value');
   let invSortAsc = $state(false);
+
+  // ─── Cash Register History ────────────────────────────
+  let cashHistory: CashRegisterReport[] = $state([]);
+  let cashHistoryLoading = $state(false);
+  let cashFilterUser = $state('');
+  let cashHistoryLimit = $state(20);
+  let cashUsers: User[] = $state([]);
+
+  async function loadCashHistory() {
+    cashHistoryLoading = true;
+    try {
+      cashHistory = await getCashRegisterHistory(cashFilterUser || undefined, cashHistoryLimit);
+    } catch { cashHistory = []; }
+    cashHistoryLoading = false;
+  }
+
+  async function handleViewCashReport(registerId: string) {
+    try {
+      const settings = await getSettings();
+      const biz = extractBusinessInfo(settings);
+      const report = await getCashRegisterReport(registerId);
+      await printCashReport(report, biz);
+    } catch (e) {
+      console.error('Error viewing cash report:', e);
+    }
+  }
+
+  function formatCashDate(d: string | null): string {
+    if (!d) return '—';
+    const date = new Date(d + 'Z');
+    return date.toLocaleDateString('es-BO', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function cashDiffClass(diff: number): string {
+    if (diff > 0.5) return 'badge-success';
+    if (diff < -0.5) return 'badge-danger';
+    return 'badge-info';
+  }
 
   // ─── Chart constants ───────────────────────────────────
   const CHART_W = 800;
@@ -311,6 +351,8 @@
     try {
       stats = await getDashboardStats();
       recentSales = (await getSales()).slice(0, 10);
+      cashUsers = await getUsers();
+      await loadCashHistory();
     } catch {}
   });
 
@@ -1070,6 +1112,84 @@
           </tfoot>
         </table>
       </div>
+    {/if}
+  </div>
+  {/if}
+
+  <!-- ─── Cash Register History ─────────────────────────── -->
+  {#if hasPermission(currentUser, 'view_reports_sales')}
+  <div class="card" style="margin-bottom: var(--space-2xl);">
+    <div class="top-header">
+      <h3 style="font-weight: 700;">📋 Historial de Cajas</h3>
+      <div class="top-controls">
+        <div style="display: flex; align-items: center; gap: var(--space-sm);">
+          <label style="font-size: var(--font-size-xs); color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Cajero:</label>
+          <select class="select select-sm" style="width: 160px;" bind:value={cashFilterUser} onchange={loadCashHistory}>
+            <option value="">Todos</option>
+            {#each cashUsers as u}
+              <option value={u.id}>{u.name}</option>
+            {/each}
+          </select>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick={loadCashHistory}>{cashHistoryLoading ? '⏳...' : '🔄 Actualizar'}</button>
+      </div>
+    </div>
+
+    {#if cashHistoryLoading}
+      <div class="top-empty">
+        <span class="text-muted">Cargando...</span>
+      </div>
+    {:else if cashHistory.length === 0}
+      <div class="top-empty">
+        <span style="font-size: 2rem;">📋</span>
+        <span class="text-muted">No hay sesiones de caja cerradas</span>
+      </div>
+    {:else}
+      <div class="table-container" style="border: none;">
+        <table>
+          <thead>
+            <tr>
+              <th>Apertura</th>
+              <th>Cierre</th>
+              <th>Cajero</th>
+              <th class="text-right">Monto Inicial</th>
+              <th class="text-right">Total Ventas</th>
+              <th class="text-right">Transacciones</th>
+              <th class="text-right">Diferencia</th>
+              <th style="width: 60px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each cashHistory as entry}
+              <tr>
+                <td class="text-sm" style="white-space: nowrap;">{formatCashDate(entry.register.opened_at)}</td>
+                <td class="text-sm" style="white-space: nowrap;">{formatCashDate(entry.register.closed_at)}</td>
+                <td style="font-weight: 600; font-size: var(--font-size-sm);">
+                  {entry.register.user_name || '—'}
+                </td>
+                <td class="text-right" style="font-variant-numeric: tabular-nums;">{fmt(entry.register.opening_amount)}</td>
+                <td class="text-right" style="font-weight: 700; color: var(--accent-success); font-variant-numeric: tabular-nums;">{fmt(entry.total_sales)}</td>
+                <td class="text-right">{entry.total_transactions}</td>
+                <td class="text-right">
+                  <span class="badge {cashDiffClass(entry.difference)}">
+                    {entry.difference >= 0 ? '+' : ''}{fmt(entry.difference)}
+                  </span>
+                </td>
+                <td>
+                  <button class="btn btn-ghost btn-sm" onclick={() => handleViewCashReport(entry.register.id)} title="Ver reporte detallado">
+                    📊
+                  </button>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+      {#if cashHistory.length >= cashHistoryLimit}
+        <div style="text-align: center; margin-top: var(--space-lg);">
+          <button class="btn btn-ghost" onclick={() => { cashHistoryLimit += 20; loadCashHistory(); }}>📄 Cargar más</button>
+        </div>
+      {/if}
     {/if}
   </div>
   {/if}

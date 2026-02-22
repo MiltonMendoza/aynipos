@@ -203,6 +203,7 @@ pub struct CashRegister {
     pub expected_amount: Option<f64>,
     pub notes: Option<String>,
     pub user_id: Option<String>,
+    pub user_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

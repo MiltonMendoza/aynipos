@@ -93,11 +93,10 @@
 
   async function handleOpenCash() {
     if (!validateOpenCash()) return;
+    if (!currentUser) return;
     try {
-      cashRegister = await openCashRegister(openingAmount);
-      if (currentUser) {
-        logAction(currentUser.id, currentUser.name, 'cash_register_opened', 'cash_register', cashRegister.id, `Caja abierta con Bs ${openingAmount.toFixed(2)}`);
-      }
+      cashRegister = await openCashRegister(openingAmount, currentUser.id);
+      logAction(currentUser.id, currentUser.name, 'cash_register_opened', 'cash_register', cashRegister.id, `Caja abierta con Bs ${openingAmount.toFixed(2)}`);
       showOpenCash = false;
       openCashErrors = {};
     } catch (e) { alert('Error: ' + e); }
@@ -332,6 +331,9 @@
         <div style="background: var(--accent-success-glow); border-radius: var(--radius-lg); padding: var(--space-xl); text-align: center; margin-bottom: var(--space-lg);">
           <div class="badge badge-success" style="margin-bottom: var(--space-sm);">● Caja Abierta</div>
           <div class="text-sm text-muted">Monto inicial: Bs {cashRegister.opening_amount.toFixed(2)}</div>
+          {#if cashRegister.user_name}
+            <div class="text-sm" style="margin-top: var(--space-xs); font-weight: 600;">👤 Cajero: {cashRegister.user_name}</div>
+          {/if}
         </div>
         <button class="btn btn-danger btn-block" onclick={closeCashModal}>🔒 Cerrar Caja</button>
       {:else}

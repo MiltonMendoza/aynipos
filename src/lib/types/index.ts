@@ -156,6 +156,7 @@ export interface CashRegister {
   expected_amount: number | null;
   notes: string | null;
   user_id: string | null;
+  user_name: string | null;
 }
 
 export interface CashRegisterReport {

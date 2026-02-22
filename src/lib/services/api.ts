@@ -111,8 +111,8 @@ export async function deleteCustomer(id: string): Promise<void> {
 
 // ─── Cash Register ─────────────────────────────────────
 
-export async function openCashRegister(openingAmount: number): Promise<CashRegister> {
-  return invoke('open_cash_register', { openingAmount });
+export async function openCashRegister(openingAmount: number, userId: string): Promise<CashRegister> {
+  return invoke('open_cash_register', { openingAmount, userId });
 }
 
 export async function closeCashRegister(closingAmount: number, notes?: string): Promise<CashRegister> {
@@ -125,6 +125,10 @@ export async function getCurrentCashRegister(): Promise<CashRegister | null> {
 
 export async function getCashRegisterReport(registerId: string): Promise<CashRegisterReport> {
   return invoke('get_cash_register_report', { registerId });
+}
+
+export async function getCashRegisterHistory(userId?: string, limit?: number): Promise<CashRegisterReport[]> {
+  return invoke('get_cash_register_history', { userId, limit });
 }
 
 // ─── Dashboard ─────────────────────────────────────────
