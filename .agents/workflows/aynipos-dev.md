@@ -8,7 +8,8 @@ description: How to develop features for the AyniPOS project (add commands, page
 
 1. **Read `ARCHITECTURE.md`** in the project root to understand the full project structure, conventions, and patterns.
 2. **Read `ROADMAP.md`** to see what features are planned and their current status.
-3. **Check the current phase** being worked on and pick the next pending feature.
+3. **Review `docs/usuario/`** — read the existing user documentation (especially `README.md` index) to understand documented flows, terminology, and UI patterns already communicated to the user.
+4. **Check the current phase** being worked on and pick the next pending feature.
 
 ---
 
@@ -17,10 +18,12 @@ description: How to develop features for the AyniPOS project (add commands, page
 Before writing ANY code, you MUST:
 
 1. **Research** the current code related to the feature (read relevant files).
-2. **Create an implementation plan** that includes:
+2. **Review related user docs** in `docs/usuario/` — check if the new feature affects or extends any already-documented flow. Note any terminology, UI patterns, or user expectations set by existing docs.
+3. **Create an implementation plan** that includes:
    - What files will be modified, created, or deleted
    - Validation rules or business logic to add
    - Any new types, API functions, or commands needed
+   - Impact on existing documented features (if any)
    - How the changes will be verified
    - In spanish 
 3. **Request user review** of the plan via `notify_user` with `BlockedOnUser: true`.
@@ -44,8 +47,9 @@ After implementation:
 // turbo
 2. Run `cd /Users/milmen/Projects/tableplus/aynipos && npx svelte-check` to verify Svelte/TypeScript.
 3. Update `ROADMAP.md` — mark feature as ✅ Completado.
-4. Create/update `walkthrough.md` artifact summarizing what was done.
-5. Notify user with results.
+4. **Update user docs** — if the feature modifies behavior documented in `docs/usuario/`, update those docs. If the new feature introduces user-facing changes, prepare notes for `/user-docs` generation.
+5. Create/update `walkthrough.md` artifact summarizing what was done.
+6. Notify user with results.
 
 ---
 
