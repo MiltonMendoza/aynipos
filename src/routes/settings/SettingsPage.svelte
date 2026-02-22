@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Setting, CashRegister, User, CreateUser } from '$lib/types';
-  import { getSettings, updateSetting, getCurrentCashRegister, openCashRegister, closeCashRegister, getCashRegisterReport, getUsers, createUser, updateUser, deleteUser } from '$lib/services/api';
+  import type { Setting, CashRegister, User, CreateUser, AuditLogEntry } from '$lib/types';
+  import { getSettings, updateSetting, getCurrentCashRegister, openCashRegister, closeCashRegister, getCashRegisterReport, getUsers, createUser, updateUser, deleteUser, logAction, getAuditLog } from '$lib/services/api';
   import { extractBusinessInfo, type BusinessInfo } from '$lib/services/receipt';
   import { printCashReport } from '$lib/services/cashReportPrint';
   import { getRoleLabel, getRoleIcon, hasPermission } from '$lib/services/permissions';
@@ -41,6 +41,15 @@
   let userPinConfirm = $state('');
   let userRole = $state('cashier');
   let userErrors: Record<string, string> = $state({});
+
+  // Audit log
+  let auditLog: AuditLogEntry[] = $state([]);
+  let auditLoading = $state(false);
+  let auditFilterUser = $state('');
+  let auditFilterAction = $state('');
+  let auditFilterDateFrom = $state('');
+  let auditFilterDateTo = $state('');
+  let auditLimit = $state(50);
 
   onMount(async () => {
     try {
@@ -86,6 +95,9 @@
     if (!validateOpenCash()) return;
     try {
       cashRegister = await openCashRegister(openingAmount);
+      if (currentUser) {
+        logAction(currentUser.id, currentUser.name, 'cash_register_opened', 'cash_register', cashRegister.id, `Caja abierta con Bs ${openingAmount.toFixed(2)}`);
+      }
       showOpenCash = false;
       openCashErrors = {};
     } catch (e) { alert('Error: ' + e); }
@@ -95,6 +107,9 @@
     if (!validateCloseCash()) return;
     try {
       const result = await closeCashRegister(closingAmount, closingNotes || undefined);
+      if (currentUser) {
+        logAction(currentUser.id, currentUser.name, 'cash_register_closed', 'cash_register', result.id, `Caja cerrada. Real: Bs ${closingAmount.toFixed(2)}`);
+      }
       cashRegister = null;
       showCloseCash = false;
       closeCashErrors = {};
@@ -177,12 +192,22 @@
           pin: userPin || undefined,
           role: userRole,
         });
+        if (currentUser) {
+          const changes: string[] = [];
+          if (editingUser.name !== userName.trim()) changes.push(`nombre: "${userName.trim()}"`);
+          if (editingUser.role !== userRole) changes.push(`rol: ${getRoleLabel(userRole)}`);
+          if (userPin) changes.push('PIN cambiado');
+          logAction(currentUser.id, currentUser.name, 'user_updated', 'user', editingUser.id, `Usuario "${userName.trim()}" actualizado (${changes.join(', ') || 'sin cambios'})`);
+        }
       } else {
-        await createUser({
+        const created = await createUser({
           name: userName.trim(),
           pin: userPin,
           role: userRole,
         });
+        if (currentUser) {
+          logAction(currentUser.id, currentUser.name, 'user_created', 'user', created.id, `Usuario "${userName.trim()}" creado (${getRoleLabel(userRole)})`);
+        }
       }
       users = await getUsers();
       showUserModal = false;
@@ -195,10 +220,82 @@
     if (!confirm(`¿Eliminar al usuario "${user.name}"?`)) return;
     try {
       await deleteUser(user.id);
+      if (currentUser) {
+        logAction(currentUser.id, currentUser.name, 'user_deleted', 'user', user.id, `Usuario "${user.name}" desactivado`);
+      }
       users = await getUsers();
     } catch (e) {
       alert('Error: ' + e);
     }
+  }
+
+  // ─── Audit Log ────────────────────────────────────────
+  async function loadAuditLog() {
+    auditLoading = true;
+    try {
+      auditLog = await getAuditLog(
+        auditFilterUser || undefined,
+        auditFilterAction || undefined,
+        auditFilterDateFrom || undefined,
+        auditFilterDateTo || undefined,
+        auditLimit
+      );
+    } catch { auditLog = []; }
+    auditLoading = false;
+  }
+
+  function loadMoreAudit() {
+    auditLimit += 50;
+    loadAuditLog();
+  }
+
+  function actionIcon(action: string): string {
+    switch (action) {
+      case 'sale_created': return '💰';
+      case 'sale_cancelled': return '🚫';
+      case 'inventory_adjusted': return '📦';
+      case 'product_created': return '➕';
+      case 'product_updated': return '✏️';
+      case 'product_deleted': return '🗑️';
+      case 'cash_register_opened': return '🔓';
+      case 'cash_register_closed': return '🔒';
+      case 'user_created': return '👤';
+      case 'user_updated': return '🔄';
+      case 'user_deleted': return '❌';
+      case 'user_login': return '🔑';
+      default: return '📝';
+    }
+  }
+
+  function actionLabel(action: string): string {
+    switch (action) {
+      case 'sale_created': return 'Venta';
+      case 'sale_cancelled': return 'Anulación';
+      case 'inventory_adjusted': return 'Ajuste inv.';
+      case 'product_created': return 'Producto+';
+      case 'product_updated': return 'Producto✏️';
+      case 'product_deleted': return 'Producto−';
+      case 'cash_register_opened': return 'Caja abierta';
+      case 'cash_register_closed': return 'Caja cerrada';
+      case 'user_created': return 'Usuario+';
+      case 'user_updated': return 'Usuario✏️';
+      case 'user_deleted': return 'Usuario−';
+      case 'user_login': return 'Login';
+      default: return action;
+    }
+  }
+
+  function actionBadgeClass(action: string): string {
+    if (action.includes('created') || action === 'cash_register_opened') return 'badge-success';
+    if (action.includes('cancelled') || action.includes('deleted')) return 'badge-danger';
+    if (action.includes('updated') || action.includes('adjusted')) return 'badge-warning';
+    return 'badge-info';
+  }
+
+  function formatDateTime(d: string | null): string {
+    if (!d) return '-';
+    const date = new Date(d + 'Z');
+    return date.toLocaleDateString('es-BO', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 </script>
 
@@ -303,6 +400,85 @@
             </tbody>
           </table>
         </div>
+      {/if}
+    </div>
+  </div>
+  {/if}
+
+  <!-- Audit Log -->
+  {#if hasPermission(currentUser, 'view_audit_log')}
+  <div style="max-width: 900px; margin-top: var(--space-xl);">
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+        <h3 style="font-weight: 700; margin: 0;">📋 Registro de Actividad</h3>
+        <button class="btn btn-ghost btn-sm" onclick={loadAuditLog}>{auditLoading ? '⏳...' : '🔄 Actualizar'}</button>
+      </div>
+
+      <!-- Filters -->
+      <div style="display: flex; gap: var(--space-md); margin-bottom: var(--space-lg); flex-wrap: wrap; align-items: flex-end;">
+        <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
+          <label style="font-size: var(--font-size-xs); color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Acción</label>
+          <select class="select" style="width: 160px; height: 36px; font-size: var(--font-size-sm);" bind:value={auditFilterAction} onchange={loadAuditLog}>
+            <option value="">Todas</option>
+            <option value="sale_created">Ventas</option>
+            <option value="sale_cancelled">Anulaciones</option>
+            <option value="inventory_adjusted">Ajustes inventario</option>
+            <option value="product_created">Producto creado</option>
+            <option value="product_updated">Producto editado</option>
+            <option value="cash_register_opened">Caja abierta</option>
+            <option value="cash_register_closed">Caja cerrada</option>
+            <option value="user_login">Logins</option>
+          </select>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
+          <label style="font-size: var(--font-size-xs); color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Desde</label>
+          <input type="date" class="input" style="width: 150px; height: 36px; font-size: var(--font-size-sm);" bind:value={auditFilterDateFrom} onchange={loadAuditLog} />
+        </div>
+        <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
+          <label style="font-size: var(--font-size-xs); color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Hasta</label>
+          <input type="date" class="input" style="width: 150px; height: 36px; font-size: var(--font-size-sm);" bind:value={auditFilterDateTo} onchange={loadAuditLog} />
+        </div>
+      </div>
+
+      {#if auditLog.length === 0 && !auditLoading}
+        <div style="text-align: center; padding: var(--space-2xl); color: var(--text-muted);">
+          <div style="font-size: 2rem; margin-bottom: var(--space-md); opacity: 0.5;">📋</div>
+          <p>Presiona "🔄 Actualizar" para cargar el registro de actividad</p>
+        </div>
+      {:else}
+        <div class="table-container" style="max-height: 500px; overflow-y: auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Usuario</th>
+                <th>Acción</th>
+                <th>Detalle</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each auditLog as entry}
+                <tr>
+                  <td class="text-sm" style="white-space: nowrap;">{formatDateTime(entry.created_at)}</td>
+                  <td style="font-weight: 600; font-size: var(--font-size-sm);">{entry.user_name}</td>
+                  <td>
+                    <span class="badge {actionBadgeClass(entry.action)}">
+                      {actionIcon(entry.action)} {actionLabel(entry.action)}
+                    </span>
+                  </td>
+                  <td class="text-sm text-muted" style="max-width: 300px;">
+                    <div class="truncate">{entry.details || '—'}</div>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+        {#if auditLog.length >= auditLimit}
+          <div style="text-align: center; margin-top: var(--space-lg);">
+            <button class="btn btn-ghost" onclick={loadMoreAudit}>📄 Cargar más</button>
+          </div>
+        {/if}
       {/if}
     </div>
   </div>

@@ -5,6 +5,7 @@ const MIGRATION_V1: &str = include_str!("../../migrations/001_initial.sql");
 const MIGRATION_V2: &str = include_str!("../../migrations/002_sale_notes.sql");
 const MIGRATION_V3: &str = include_str!("../../migrations/003_lot_movements.sql");
 const MIGRATION_V4: &str = include_str!("../../migrations/004_users.sql");
+const MIGRATION_V5: &str = include_str!("../../migrations/005_audit_log.sql");
 
 pub fn run_migrations(conn: &Connection) -> Result<()> {
     // Create migrations tracking table
@@ -49,7 +50,13 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.execute("INSERT INTO _migrations (version) VALUES (4)", [])?;
     }
 
-    log::info!("Database at version {}", std::cmp::max(current_version, 4));
+    if current_version < 5 {
+        log::info!("Applying migration v5: audit log");
+        conn.execute_batch(MIGRATION_V5)?;
+        conn.execute("INSERT INTO _migrations (version) VALUES (5)", [])?;
+    }
+
+    log::info!("Database at version {}", std::cmp::max(current_version, 5));
     Ok(())
 }
 

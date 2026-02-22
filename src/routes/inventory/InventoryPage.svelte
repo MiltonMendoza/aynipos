@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { ProductWithStock, Category, CreateProduct, UpdateProduct, ImportResult, InventoryLot, InventoryMovement } from '$lib/types';
-  import { getInventory, adjustInventory, getCategories, createProduct, createCategory, updateProduct, exportProductsCsv, importProductsCsv, getProductLots, deleteLot, getInventoryMovements } from '$lib/services/api';
+  import type { ProductWithStock, Category, CreateProduct, UpdateProduct, ImportResult, InventoryLot, InventoryMovement, User } from '$lib/types';
+  import { getInventory, adjustInventory, getCategories, createProduct, createCategory, updateProduct, exportProductsCsv, importProductsCsv, getProductLots, deleteLot, getInventoryMovements, logAction } from '$lib/services/api';
+
+  let { currentUser }: { currentUser: User | null } = $props();
   import { save, open } from '@tauri-apps/plugin-dialog';
 
   let inventory: ProductWithStock[] = $state([]);
@@ -105,7 +107,10 @@
   async function handleAddProduct() {
     if (!validateProduct()) return;
     try {
-      await createProduct(newProduct);
+      const created = await createProduct(newProduct);
+      if (currentUser) {
+        logAction(currentUser.id, currentUser.name, 'product_created', 'product', created.id, `Producto "${newProduct.name}" creado`);
+      }
       showAddProduct = false;
       newProduct = { sku: '', name: '', purchase_price: 0, sale_price: 0 };
       productErrors = {};
@@ -153,6 +158,10 @@
         adjustLotNumber || undefined,
         adjustExpiryDate || undefined
       );
+      if (currentUser) {
+        const sign = qty >= 0 ? '+' : '';
+        logAction(currentUser.id, currentUser.name, 'inventory_adjusted', 'product', adjustProduct.product.id, `${sign}${qty} unidades de "${adjustProduct.product.name}" (${adjustType})`);
+      }
       showAdjust = false;
       await loadInventory();
     } catch (e) { alert('Error: ' + e); }
@@ -214,6 +223,9 @@
     if (!validateEditProduct()) return;
     try {
       await updateProduct(editProduct);
+      if (currentUser) {
+        logAction(currentUser.id, currentUser.name, 'product_updated', 'product', editProduct.id, `Producto "${editProduct.name}" actualizado`);
+      }
       showEditProduct = false;
       editErrors = {};
       await loadInventory();

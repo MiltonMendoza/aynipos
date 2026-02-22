@@ -15,7 +15,8 @@ export type Permission =
   | 'view_reports_inventory'
   | 'manage_settings'
   | 'manage_users'
-  | 'manage_cash_register';
+  | 'manage_cash_register'
+  | 'view_audit_log';
 
 const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   admin: [
@@ -32,6 +33,7 @@ const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     'manage_settings',
     'manage_users',
     'manage_cash_register',
+    'view_audit_log',
   ],
   cashier: [
     'pos',

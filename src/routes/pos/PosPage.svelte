@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { ProductWithStock, CartItem, Customer, CreateCustomer, Sale, SaleItem } from '$lib/types';
-  import { getProducts, getProductByBarcode, createSale, getSaleItems, getCurrentCashRegister, getDashboardStats, getCustomers, createCustomer, getSettings } from '$lib/services/api';
+  import type { ProductWithStock, CartItem, Customer, CreateCustomer, Sale, SaleItem, User } from '$lib/types';
+  import { getProducts, getProductByBarcode, createSale, getSaleItems, getCurrentCashRegister, getDashboardStats, getCustomers, createCustomer, getSettings, logAction } from '$lib/services/api';
+
+  let { currentUser }: { currentUser: User | null } = $props();
   import { playAddSound, playErrorSound, playSuccessSound, playScanSound } from '$lib/services/sounds';
   import { printReceipt, extractBusinessInfo, type BusinessInfo } from '$lib/services/receipt';
 
@@ -444,6 +446,11 @@
       // Save sale data for receipt printing
       lastCompletedSale = completedSale;
       lastCompletedSaleItems = await getSaleItems(completedSale.id);
+
+      // Audit log
+      if (currentUser) {
+        logAction(currentUser.id, currentUser.name, 'sale_created', 'sale', completedSale.id, `Venta #${completedSale.sale_number} por Bs ${saleTotal.toFixed(2)}`);
+      }
 
       // Success feedback
       lastSaleTotal = saleTotal;

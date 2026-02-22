@@ -2,6 +2,7 @@
   import '../app.css';
   import type { AppRoute, User } from '$lib/types';
   import { canAccessRoute, getDefaultRoute, getRoleLabel, getRoleIcon } from '$lib/services/permissions';
+  import { logAction } from '$lib/services/api';
 
   let { children } = $props();
 
@@ -38,6 +39,7 @@
   function handleLogin(user: User) {
     currentUser = user;
     currentRoute = getDefaultRoute(user);
+    logAction(user.id, user.name, 'user_login', 'user', user.id, `${user.name} inició sesión`);
   }
 
   function handleLogout() {
@@ -136,7 +138,7 @@
   <main class="app-content">
     {#if currentRoute === 'pos'}
       {#await import('./pos/PosPage.svelte') then { default: PosPage }}
-        <PosPage />
+        <PosPage {currentUser} />
       {/await}
     {:else if currentRoute === 'sales'}
       {#await import('./sales/SalesPage.svelte') then { default: SalesPage }}
@@ -144,7 +146,7 @@
       {/await}
     {:else if currentRoute === 'inventory'}
       {#await import('./inventory/InventoryPage.svelte') then { default: InventoryPage }}
-        <InventoryPage />
+        <InventoryPage {currentUser} />
       {/await}
     {:else if currentRoute === 'customers'}
       {#await import('./customers/CustomersPage.svelte') then { default: CustomersPage }}

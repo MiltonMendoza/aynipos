@@ -308,3 +308,16 @@ export interface UpdateUser {
 // ─── Navigation ────────────────────────────────────────
 
 export type AppRoute = 'pos' | 'inventory' | 'customers' | 'sales' | 'reports' | 'settings';
+
+// ─── Audit Log ────────────────────────────────────────
+
+export interface AuditLogEntry {
+  id: string;
+  user_id: string;
+  user_name: string;
+  action: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  details: string | null;
+  created_at: string | null;
+}

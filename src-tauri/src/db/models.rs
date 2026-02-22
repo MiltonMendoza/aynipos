@@ -339,3 +339,17 @@ pub struct UpdateUser {
     pub role: Option<String>,
     pub is_active: Option<bool>,
 }
+
+// ─── Audit Log ────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditLogEntry {
+    pub id: String,
+    pub user_id: String,
+    pub user_name: String,
+    pub action: String,
+    pub entity_type: Option<String>,
+    pub entity_id: Option<String>,
+    pub details: Option<String>,
+    pub created_at: Option<String>,
+}

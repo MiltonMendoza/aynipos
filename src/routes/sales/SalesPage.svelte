@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Sale, SaleItem, User } from '$lib/types';
-  import { getSales, getSaleItems, cancelSale, getSettings } from '$lib/services/api';
+  import { getSales, getSaleItems, cancelSale, getSettings, logAction } from '$lib/services/api';
   import { printReceipt, extractBusinessInfo, type BusinessInfo } from '$lib/services/receipt';
   import { hasPermission } from '$lib/services/permissions';
 
@@ -106,8 +106,12 @@
 
   async function handleCancel(saleId: string) {
     if (!confirm('¿Estás seguro de anular esta venta?')) return;
+    const sale = sales.find(s => s.id === saleId);
     try {
       await cancelSale(saleId);
+      if (currentUser && sale) {
+        logAction(currentUser.id, currentUser.name, 'sale_cancelled', 'sale', saleId, `Venta #${sale.sale_number} anulada`);
+      }
       await loadSales();
       selectedSale = null;
     } catch (e) {

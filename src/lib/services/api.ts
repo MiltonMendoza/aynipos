@@ -8,7 +8,8 @@ import type {
   DashboardStats, TopSellingProduct, SalesChartDataPoint, ProfitMarginProduct, InventoryReportItem,
   Setting, Category, CreateCategory,
   ImportResult,
-  User, CreateUser, UpdateUser
+  User, CreateUser, UpdateUser,
+  AuditLogEntry
 } from '$lib/types';
 
 // ─── Products ──────────────────────────────────────────
@@ -214,3 +215,18 @@ export async function loginWithPin(pin: string): Promise<User> {
   return invoke('login_with_pin', { pin });
 }
 
+// ─── Audit Log ─────────────────────────────────────────
+
+export async function logAction(
+  userId: string, userName: string, action: string,
+  entityType?: string, entityId?: string, details?: string
+): Promise<void> {
+  return invoke('log_action', { userId, userName, action, entityType, entityId, details });
+}
+
+export async function getAuditLog(
+  userId?: string, action?: string,
+  dateFrom?: string, dateTo?: string, limit?: number
+): Promise<AuditLogEntry[]> {
+  return invoke('get_audit_log', { userId, action, dateFrom, dateTo, limit });
+}

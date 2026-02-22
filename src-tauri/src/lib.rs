@@ -79,6 +79,9 @@ pub fn run() {
             commands::users::update_user,
             commands::users::delete_user,
             commands::users::login_with_pin,
+            // Audit Log
+            commands::audit_log::log_action,
+            commands::audit_log::get_audit_log,
         ])
         .run(tauri::generate_context!())
         .expect("error while running AyniPOS");
