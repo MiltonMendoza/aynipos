@@ -280,6 +280,31 @@ export interface CartItem {
   subtotal: number;
 }
 
+// ─── Users ─────────────────────────────────────────────
+
+export interface User {
+  id: string;
+  name: string;
+  role: string;
+  is_active: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface CreateUser {
+  name: string;
+  pin: string;
+  role?: string;
+}
+
+export interface UpdateUser {
+  id: string;
+  name?: string;
+  pin?: string;
+  role?: string;
+  is_active?: boolean;
+}
+
 // ─── Navigation ────────────────────────────────────────
 
 export type AppRoute = 'pos' | 'inventory' | 'customers' | 'sales' | 'reports' | 'settings';

@@ -73,6 +73,12 @@ pub fn run() {
             // Reports Export
             commands::reports::save_report_csv,
             commands::reports::save_report_html,
+            // Users
+            commands::users::get_users,
+            commands::users::create_user,
+            commands::users::update_user,
+            commands::users::delete_user,
+            commands::users::login_with_pin,
         ])
         .run(tauri::generate_context!())
         .expect("error while running AyniPOS");

@@ -311,3 +311,31 @@ pub struct InventoryReportItem {
     pub last_movement_date: Option<String>,
     pub days_without_movement: Option<i64>,
 }
+
+// ─── Users ─────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct User {
+    pub id: String,
+    pub name: String,
+    pub role: String,
+    pub is_active: bool,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateUser {
+    pub name: String,
+    pub pin: String,
+    pub role: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateUser {
+    pub id: String,
+    pub name: Option<String>,
+    pub pin: Option<String>,
+    pub role: Option<String>,
+    pub is_active: Option<bool>,
+}

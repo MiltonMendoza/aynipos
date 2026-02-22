@@ -41,6 +41,12 @@
 | 3.6 | 📦 Reporte de inventario | Valorización del stock actual y productos sin movimiento | [Ver guía](3_6_reporte_inventario.md) |
 | 3.7 | 📥 Exportar a Excel/PDF | Descarga cualquier reporte como CSV o PDF | [Ver guía](3_7_exportar_excel_pdf.md) |
 
+### Fase 5: Multi-usuario y Seguridad
+
+| # | Función | Descripción | Documentación |
+|---|---------|-------------|---------------|
+| 5.1 | 🔐 Login con PIN | Ingresa al sistema con un PIN numérico rápido y seguro | [Ver guía](5_1_login_pin.md) |
+
 ---
 
 _Última actualización: 2026-02-22_

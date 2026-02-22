@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Setting, CashRegister } from '$lib/types';
-  import { getSettings, updateSetting, getCurrentCashRegister, openCashRegister, closeCashRegister, getCashRegisterReport } from '$lib/services/api';
+  import type { Setting, CashRegister, User, CreateUser } from '$lib/types';
+  import { getSettings, updateSetting, getCurrentCashRegister, openCashRegister, closeCashRegister, getCashRegisterReport, getUsers, createUser, updateUser, deleteUser } from '$lib/services/api';
   import { extractBusinessInfo, type BusinessInfo } from '$lib/services/receipt';
   import { printCashReport } from '$lib/services/cashReportPrint';
 
@@ -29,6 +29,16 @@
   // Save feedback
   let saveSuccess = $state(false);
 
+  // Users management
+  let users: User[] = $state([]);
+  let showUserModal = $state(false);
+  let editingUser: User | null = $state(null);
+  let userName = $state('');
+  let userPin = $state('');
+  let userPinConfirm = $state('');
+  let userRole = $state('cashier');
+  let userErrors: Record<string, string> = $state({});
+
   onMount(async () => {
     try {
       settings = await getSettings();
@@ -41,6 +51,7 @@
         if (s.key === 'business_phone') businessPhone = s.value;
         if (s.key === 'business_city') businessCity = s.value;
       }
+      users = await getUsers();
     } catch {}
   });
 
@@ -85,9 +96,7 @@
       showCloseCash = false;
       closeCashErrors = {};
       lastClosedRegisterId = result.id;
-      // Refresh business info in case it was updated
       businessInfo = extractBusinessInfo(settings);
-      // Generate and open closing report
       const report = await getCashRegisterReport(result.id);
       await printCashReport(report, businessInfo);
     } catch (e) { alert('Error: ' + e); }
@@ -114,13 +123,87 @@
     closeCashErrors = {};
     showCloseCash = true;
   }
+
+  // ─── Users Management ───────────────────────────────────
+  function openNewUserModal() {
+    editingUser = null;
+    userName = '';
+    userPin = '';
+    userPinConfirm = '';
+    userRole = 'cashier';
+    userErrors = {};
+    showUserModal = true;
+  }
+
+  function openEditUserModal(user: User) {
+    editingUser = user;
+    userName = user.name;
+    userPin = '';
+    userPinConfirm = '';
+    userRole = user.role;
+    userErrors = {};
+    showUserModal = true;
+  }
+
+  function validateUser(): boolean {
+    const e: Record<string, string> = {};
+    if (!userName.trim()) e.name = 'El nombre es requerido';
+    if (!editingUser) {
+      // Creating — PIN required
+      if (!userPin) e.pin = 'El PIN es requerido';
+      else if (userPin.length < 4 || userPin.length > 6) e.pin = 'El PIN debe tener 4-6 dígitos';
+      else if (!/^\d+$/.test(userPin)) e.pin = 'El PIN debe ser solo números';
+      if (userPin !== userPinConfirm) e.pinConfirm = 'Los PINs no coinciden';
+    } else if (userPin) {
+      // Editing — PIN optional, but validate if provided
+      if (userPin.length < 4 || userPin.length > 6) e.pin = 'El PIN debe tener 4-6 dígitos';
+      else if (!/^\d+$/.test(userPin)) e.pin = 'El PIN debe ser solo números';
+      if (userPin !== userPinConfirm) e.pinConfirm = 'Los PINs no coinciden';
+    }
+    userErrors = e;
+    return Object.keys(e).length === 0;
+  }
+
+  async function handleSaveUser() {
+    if (!validateUser()) return;
+    try {
+      if (editingUser) {
+        await updateUser({
+          id: editingUser.id,
+          name: userName.trim(),
+          pin: userPin || undefined,
+          role: userRole,
+        });
+      } else {
+        await createUser({
+          name: userName.trim(),
+          pin: userPin,
+          role: userRole,
+        });
+      }
+      users = await getUsers();
+      showUserModal = false;
+    } catch (e) {
+      alert('Error: ' + e);
+    }
+  }
+
+  async function handleDeleteUser(user: User) {
+    if (!confirm(`¿Eliminar al usuario "${user.name}"?`)) return;
+    try {
+      await deleteUser(user.id);
+      users = await getUsers();
+    } catch (e) {
+      alert('Error: ' + e);
+    }
+  }
 </script>
 
 <div class="page">
   <div class="page-header">
     <div>
       <h1 class="page-title">⚙️ Configuración</h1>
-      <p class="page-subtitle">Datos del negocio y caja</p>
+      <p class="page-subtitle">Datos del negocio, caja y usuarios</p>
     </div>
   </div>
 
@@ -162,6 +245,61 @@
       {/if}
     </div>
   </div>
+
+  <!-- Users Management -->
+  <div style="max-width: 900px; margin-top: var(--space-xl);">
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+        <h3 style="font-weight: 700; margin: 0;">👥 Usuarios</h3>
+        <button class="btn btn-primary btn-sm" onclick={openNewUserModal}>➕ Nuevo Usuario</button>
+      </div>
+
+      {#if users.length === 0}
+        <p class="text-muted" style="text-align: center; padding: var(--space-xl);">No hay usuarios registrados</p>
+      {:else}
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Rol</th>
+                <th>Creado</th>
+                <th style="width: 120px;">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each users as user}
+                <tr>
+                  <td>
+                    <div style="display: flex; align-items: center; gap: var(--space-sm);">
+                      <span style="width: 28px; height: 28px; background: var(--bg-hover); border-radius: var(--radius-full); display: flex; align-items: center; justify-content: center; font-size: var(--font-size-xs);">
+                        {user.role === 'admin' ? '👑' : '👤'}
+                      </span>
+                      {user.name}
+                    </div>
+                  </td>
+                  <td>
+                    <span class="badge" class:badge-warning={user.role === 'admin'} class:badge-info={user.role !== 'admin'}>
+                      {user.role === 'admin' ? 'Administrador' : 'Cajero'}
+                    </span>
+                  </td>
+                  <td class="text-muted text-sm">
+                    {user.created_at ? new Date(user.created_at + 'Z').toLocaleDateString('es-BO') : '—'}
+                  </td>
+                  <td>
+                    <div style="display: flex; gap: var(--space-xs);">
+                      <button class="btn btn-ghost btn-sm" onclick={() => openEditUserModal(user)} title="Editar">✏️</button>
+                      <button class="btn btn-ghost btn-sm" style="color: var(--accent-danger);" onclick={() => handleDeleteUser(user)} title="Eliminar">🗑️</button>
+                    </div>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+    </div>
+  </div>
 </div>
 
 {#if showOpenCash}
@@ -198,6 +336,51 @@
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick={() => showCloseCash = false}>Cancelar</button>
         <button class="btn btn-danger" onclick={handleCloseCash}>🔒 Cerrar</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if showUserModal}
+  <div class="modal-overlay" onclick={() => showUserModal = false}>
+    <div class="modal" onclick={(e) => e.stopPropagation()}>
+      <div class="modal-header">
+        <h3 class="modal-title">{editingUser ? '✏️ Editar Usuario' : '➕ Nuevo Usuario'}</h3>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; flex-direction: column; gap: var(--space-lg);">
+          <div class="input-group">
+            <label class="input-label">Nombre *</label>
+            <input class="input" class:input-error={userErrors.name} bind:value={userName} placeholder="Nombre del usuario" oninput={() => { if (userErrors.name) { const { name, ...rest } = userErrors; userErrors = rest; } }} />
+            {#if userErrors.name}<span class="field-error">{userErrors.name}</span>{/if}
+          </div>
+
+          <div class="input-group">
+            <label class="input-label">{editingUser ? 'Nuevo PIN (dejar vacío para no cambiar)' : 'PIN *'}</label>
+            <input class="input" class:input-error={userErrors.pin} type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" bind:value={userPin} placeholder="4-6 dígitos" oninput={() => { if (userErrors.pin) { const { pin, ...rest } = userErrors; userErrors = rest; } }} />
+            {#if userErrors.pin}<span class="field-error">{userErrors.pin}</span>{/if}
+          </div>
+
+          <div class="input-group">
+            <label class="input-label">Confirmar PIN</label>
+            <input class="input" class:input-error={userErrors.pinConfirm} type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" bind:value={userPinConfirm} placeholder="Repetir PIN" oninput={() => { if (userErrors.pinConfirm) { const { pinConfirm, ...rest } = userErrors; userErrors = rest; } }} />
+            {#if userErrors.pinConfirm}<span class="field-error">{userErrors.pinConfirm}</span>{/if}
+          </div>
+
+          <div class="input-group">
+            <label class="input-label">Rol</label>
+            <select class="select" bind:value={userRole}>
+              <option value="cashier">Cajero</option>
+              <option value="admin">Administrador</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick={() => showUserModal = false}>Cancelar</button>
+        <button class="btn btn-primary" onclick={handleSaveUser}>
+          {editingUser ? '💾 Guardar' : '➕ Crear'}
+        </button>
       </div>
     </div>
   </div>

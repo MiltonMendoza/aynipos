@@ -7,7 +7,8 @@ import type {
   InventoryMovement, InventoryLot,
   DashboardStats, TopSellingProduct, SalesChartDataPoint, ProfitMarginProduct, InventoryReportItem,
   Setting, Category, CreateCategory,
-  ImportResult
+  ImportResult,
+  User, CreateUser, UpdateUser
 } from '$lib/types';
 
 // ─── Products ──────────────────────────────────────────
@@ -190,3 +191,26 @@ export async function saveReportCsv(content: string, filePath: string): Promise<
 export async function saveReportHtml(html: string): Promise<string> {
   return invoke('save_report_html', { html });
 }
+
+// ─── Users ─────────────────────────────────────────────
+
+export async function getUsers(): Promise<User[]> {
+  return invoke('get_users');
+}
+
+export async function createUser(user: CreateUser): Promise<User> {
+  return invoke('create_user', { user });
+}
+
+export async function updateUser(user: UpdateUser): Promise<void> {
+  return invoke('update_user', { user });
+}
+
+export async function deleteUser(id: string): Promise<void> {
+  return invoke('delete_user', { id });
+}
+
+export async function loginWithPin(pin: string): Promise<User> {
+  return invoke('login_with_pin', { pin });
+}
+

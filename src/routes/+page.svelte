@@ -1,12 +1,13 @@
 <script lang="ts">
   import '../app.css';
-  import type { AppRoute } from '$lib/types';
+  import type { AppRoute, User } from '$lib/types';
 
   let { children } = $props();
 
   let currentRoute: AppRoute = $state('pos');
   let lowStockBadge = $state(0);
   let showShortcuts = $state(false);
+  let currentUser: User | null = $state(null);
 
   const navItems: { route: AppRoute; icon: string; label: string; section?: string }[] = [
     { route: 'pos', icon: '🛒', label: 'Punto de Venta', section: 'Principal' },
@@ -26,6 +27,15 @@
       e.preventDefault();
       showShortcuts = !showShortcuts;
     }
+  }
+
+  function handleLogin(user: User) {
+    currentUser = user;
+  }
+
+  function handleLogout() {
+    currentUser = null;
+    currentRoute = 'pos';
   }
 
   // Group items by section
@@ -51,6 +61,12 @@
 </script>
 
 <svelte:window onkeydown={handleGlobalKeydown} />
+
+{#if !currentUser}
+  {#await import('./login/LoginScreen.svelte') then { default: LoginScreen }}
+    <LoginScreen onLogin={handleLogin} />
+  {/await}
+{:else}
 
 <div class="app-layout">
   <!-- Sidebar -->
@@ -85,16 +101,23 @@
     <div style="padding: var(--space-lg); border-top: 1px solid var(--border-color);">
       <div class="flex items-center gap-md">
         <div style="width: 32px; height: 32px; background: var(--bg-hover); border-radius: var(--radius-full); display: flex; align-items: center; justify-content: center; font-size: var(--font-size-sm);">
-          💊
+          👤
         </div>
         <div class="flex-1">
-          <div style="font-size: var(--font-size-sm); font-weight: 600;">Mi Farmacia</div>
-          <div style="font-size: var(--font-size-xs); color: var(--text-muted);">v0.1.0</div>
+          <div style="font-size: var(--font-size-sm); font-weight: 600;">{currentUser.name}</div>
+          <div style="font-size: var(--font-size-xs); color: var(--text-muted);">{currentUser.role === 'admin' ? 'Administrador' : 'Cajero'}</div>
         </div>
       </div>
       <button
         class="btn btn-ghost btn-sm"
         style="width: 100%; margin-top: var(--space-sm); font-size: var(--font-size-xs);"
+        onclick={handleLogout}
+      >
+        🚪 Cerrar Sesión
+      </button>
+      <button
+        class="btn btn-ghost btn-sm"
+        style="width: 100%; margin-top: var(--space-xs); font-size: var(--font-size-xs);"
         onclick={() => showShortcuts = !showShortcuts}
       >
         ⌨️ Atajos (F10)
@@ -147,4 +170,6 @@
     <div class="shortcut-row"><span>Cantidad +1 / −1</span><span class="shortcut-key">+ / −</span></div>
     <div class="shortcut-row"><span>Mostrar/ocultar atajos</span><span class="shortcut-key">F10</span></div>
   </div>
+{/if}
+
 {/if}
