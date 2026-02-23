@@ -54,7 +54,7 @@ El recibo incluye automáticamente:
 | 🧾 **Datos de la venta** | Número de venta, fecha y hora, nombre del cliente |
 | 📦 **Productos** | Nombre, cantidad, precio unitario, total por producto |
 | 💰 **Descuentos** | Descuentos por ítem y/o descuento global (si aplica) |
-| 💵 **Totales** | Subtotal, IVA, y **TOTAL** en grande |
+| 💵 **Totales** | Subtotal, Débito Fiscal, y **TOTAL** en grande |
 | 💳 **Método de pago** | Efectivo, Tarjeta, o QR |
 | 📝 **Notas** | Observaciones de la venta (si las hay) |
 | 🙏 **Pie** | "¡Gracias por su compra!" |

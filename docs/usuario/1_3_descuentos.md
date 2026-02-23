@@ -82,7 +82,7 @@ Cuando hay descuentos aplicados, la zona de totales del carrito muestra:
 |-------|---------|
 | Subtotal | Bs 100.00 |
 | Desc. por ítems | −Bs 8.00 |
-| IVA (13%) | Bs 11.96 |
+| Débito Fiscal | Bs 11.96 |
 | Descuento global | −Bs 5.00 |
 | **Total** | **Bs 87.00** |
 
@@ -95,7 +95,7 @@ Las líneas de descuento solo aparecen cuando hay descuentos activos. Sin descue
 En la página **📋 Historial de Ventas**:
 1. Haz clic en una venta para ver su detalle
 2. Si la venta tuvo descuentos por producto, verás **"· Desc. −Bs X.XX"** en cada producto afectado
-3. Si hubo descuento global, verás una línea **"Descuento"** entre el Subtotal y el IVA
+3. Si hubo descuento global, verás una línea **"Descuento"** entre el Subtotal y el Débito Fiscal
 
 ---
 
@@ -134,4 +134,4 @@ Se borra todo: los productos, los descuentos por ítem y el descuento global.
 
 - Los descuentos **no se pueden editar** después de completar la venta — asegúrate de verificar los montos antes de cobrar
 - El descuento global se muestra como un monto fijo en la venta, aunque lo hayas ingresado como porcentaje
-- El IVA se calcula **después** de aplicar los descuentos por producto, pero **antes** del descuento global
+- La línea **Débito Fiscal** muestra cuánto del total corresponde al impuesto (ya incluido en el precio de venta). Es un dato **informativo** para fines fiscales — no se suma ni se resta del total

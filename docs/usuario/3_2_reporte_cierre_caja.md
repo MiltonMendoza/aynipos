@@ -9,7 +9,7 @@ Cada vez que cierras la caja, el sistema genera automáticamente un **reporte co
 - Cuántas ventas hiciste y por cuánto
 - Desglose por método de pago (efectivo, tarjeta, QR)
 - Ventas anuladas
-- Impuestos y descuentos del día
+- Débito Fiscal y descuentos del día
 - **Reconciliación**: si el dinero en caja coincide con lo esperado
 
 Es ideal para el **cierre diario** y llevar el control del efectivo.
@@ -22,16 +22,39 @@ Es ideal para el **cierre diario** y llevar el control del efectivo.
 
 1. Ve a **⚙️ Configuración** en el menú lateral
 2. En la sección **💰 Caja Registradora**, haz clic en **🔒 Cerrar Caja**
-3. Se abrirá una ventana pidiendo el **monto real** que hay en la caja (cuéntalo físicamente)
-4. Ingresa el monto en bolivianos (Bs)
-5. Opcionalmente agrega **notas** (por ejemplo: "Faltó cambio de Bs 10")
-6. Haz clic en **🔒 Cerrar**
+3. Se abrirá una ventana con el **resumen del turno**
 
-### Paso 2: Se abre el reporte automáticamente
+### Paso 2: Revisar el resumen del turno
+
+La ventana de cierre muestra automáticamente un desglose antes de que ingreses el monto:
+
+| Dato | Descripción |
+|------|-------------|
+| **Monto apertura** | Lo que pusiste al abrir la caja |
+| **Ventas en efectivo/mixto** | Total de ventas que generaron efectivo en caja |
+| **Ventas totales** | Incluye también tarjeta y QR (solo como referencia) |
+| **Total transacciones** | Cantidad de ventas completadas en el turno |
+| **Monto esperado** | Apertura + ventas en efectivo = lo que **debería** haber en caja |
+
+> 💡 **Tip:** El monto esperado te sirve como referencia para saber cuánto dinero deberías contar en la caja.
+
+### Paso 3: Ingresar el monto real
+
+1. El campo **"💰 Monto real en caja"** viene **pre-llenado** con el monto esperado
+2. **Cuenta el dinero físicamente** y ajusta el número si es diferente
+3. Si hay diferencia, el sistema te muestra en tiempo real:
+   - 📈 **Sobrante** (verde) — si hay más dinero del esperado
+   - 📉 **Faltante** (rojo) — si hay menos dinero del esperado
+   - ✅ **"El monto coincide"** — si el conteo es exacto
+
+4. Opcionalmente agrega **notas** (por ejemplo: "Se prestó cambio de Bs 10 de la caja chica")
+5. Haz clic en **🔒 Cerrar Caja**
+
+### Paso 4: Se abre el reporte automáticamente
 
 Al cerrar la caja, se abrirá tu **navegador de internet** (Safari, Chrome, etc.) con el reporte completo listo para imprimir.
 
-### Paso 3: Imprimir o guardar
+### Paso 5: Imprimir o guardar
 
 1. Haz clic en el botón azul **🖨️ Imprimir Reporte**
 2. O presiona **Ctrl+P** (Windows) / **Cmd+P** (Mac)
@@ -50,9 +73,10 @@ Al cerrar la caja, se abrirá tu **navegador de internet** (Safari, Chrome, etc.
 |---------|---------|
 | 🏪 **Encabezado** | Nombre del negocio, NIT, dirección, teléfono, ciudad |
 | 📅 **Período** | Fecha y hora de apertura y cierre de la caja |
+| 👤 **Cajero** | Nombre del cajero que tuvo el turno (si aplica) |
 | 💳 **Ventas por método de pago** | Tabla con: Efectivo, Tarjeta, QR — cada uno con número de ventas y monto total |
 | ❌ **Ventas anuladas** | Cantidad de ventas que fueron canceladas en el turno |
-| 📊 **Resumen** | Descuentos totales, IVA incluido, y **TOTAL VENTAS** en grande |
+| 📊 **Resumen** | Descuentos totales, Débito Fiscal, y **TOTAL VENTAS** en grande |
 | 💰 **Reconciliación** | Monto de apertura, monto esperado, monto real, y **DIFERENCIA** |
 | 📝 **Notas** | Observaciones que escribiste al cerrar (si las hay) |
 
@@ -94,7 +118,7 @@ Sí. El reporte se genera **automáticamente** al momento de cerrar la caja. No 
 Haz clic en **📊 Ver último cierre** en la pantalla de Configuración para volver a generarlo.
 
 ### ¿Qué pasa si la diferencia es cero?
-¡Perfecto! Significa que el efectivo en caja coincide exactamente con lo esperado. La diferencia aparecerá como **+Bs 0.00** en color verde.
+¡Perfecto! Significa que el efectivo en caja coincide exactamente con lo esperado. En la ventana de cierre verás el mensaje ✅ **"El monto coincide con lo esperado"** en verde.
 
 ### ¿Puedo cerrar caja sin haber vendido nada?
 Sí. El reporte mostrará "Sin ventas en este turno" y los totales serán Bs 0.00.
@@ -105,12 +129,19 @@ No. Las ventas anuladas se reportan como cantidad aparte, pero **no se suman** a
 ### ¿Qué tamaño tiene el reporte?
 Está diseñado para papel de **80mm de ancho** (impresoras térmicas de tickets). Si imprimes en papel carta, se centrará en la página.
 
+### ¿El monto viene pre-llenado al cerrar?
+Sí. El sistema calcula automáticamente cuánto debería haber en caja (apertura + ventas en efectivo) y lo coloca como valor inicial. Solo necesitas ajustarlo si el conteo físico es diferente.
+
+### ¿Qué es "Débito Fiscal" en el reporte?
+Es la porción del impuesto (13%) que ya está **incluida** en el precio de venta de cada producto. Es un dato informativo para fines fiscales — no se suma ni se resta del total.
+
 ---
 
 ## Notas importantes
 
 - 📋 El reporte se abre **automáticamente** al cerrar caja — no necesitas buscarlo
 - 🌐 Se necesita un **navegador de internet** instalado (Safari, Chrome, Firefox)
-- 💰 Cuenta el dinero en caja **antes** de cerrar para ingresar el monto correcto
+- 💰 El monto viene **pre-llenado** con lo esperado — solo ajusta si el conteo físico es diferente
+- 📈📉 El indicador de **sobrante/faltante** aparece en tiempo real al modificar el monto
 - 📄 Puedes guardar como **PDF** desde el diálogo de impresión para tener un archivo digital
 - 🔄 El botón **📊 Ver último cierre** permite reimprimir mientras no abras una nueva caja

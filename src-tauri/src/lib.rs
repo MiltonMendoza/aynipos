@@ -54,6 +54,7 @@ pub fn run() {
             commands::cash_register::get_current_cash_register,
             commands::cash_register::get_cash_register_report,
             commands::cash_register::get_cash_register_history,
+            commands::cash_register::get_expected_closing_amount,
             // Dashboard
             commands::dashboard::get_dashboard_stats,
             commands::dashboard::get_top_selling_products,

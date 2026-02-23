@@ -3,7 +3,7 @@ import type {
   ProductWithStock, CreateProduct, UpdateProduct,
   Customer, CreateCustomer,
   Sale, SaleItem, CreateSale,
-  CashRegister, CashRegisterReport,
+  CashRegister, CashRegisterReport, ExpectedClosingInfo,
   InventoryMovement, InventoryLot,
   DashboardStats, TopSellingProduct, SalesChartDataPoint, ProfitMarginProduct, InventoryReportItem,
   Setting, Category, CreateCategory,
@@ -131,6 +131,10 @@ export async function getCashRegisterReport(registerId: string): Promise<CashReg
 
 export async function getCashRegisterHistory(userId?: string, limit?: number): Promise<CashRegisterReport[]> {
   return invoke('get_cash_register_history', { userId, limit });
+}
+
+export async function getExpectedClosingAmount(): Promise<ExpectedClosingInfo> {
+  return invoke('get_expected_closing_amount');
 }
 
 // ─── Dashboard ─────────────────────────────────────────

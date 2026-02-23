@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import type { Setting, CashRegister, User, CreateUser, AuditLogEntry, BackupInfo, LicenseStatus } from '$lib/types';
-  import { getSettings, updateSetting, getCurrentCashRegister, openCashRegister, closeCashRegister, getCashRegisterReport, getUsers, createUser, updateUser, deleteUser, logAction, getAuditLog, createBackup, getBackupInfo, getLicenseStatus, activateLicense, deactivateLicense } from '$lib/services/api';
+  import type { Setting, CashRegister, User, CreateUser, AuditLogEntry, BackupInfo, LicenseStatus, ExpectedClosingInfo } from '$lib/types';
+  import { getSettings, updateSetting, getCurrentCashRegister, openCashRegister, closeCashRegister, getCashRegisterReport, getExpectedClosingAmount, getUsers, createUser, updateUser, deleteUser, logAction, getAuditLog, createBackup, getBackupInfo, getLicenseStatus, activateLicense, deactivateLicense } from '$lib/services/api';
   import { extractBusinessInfo, type BusinessInfo } from '$lib/services/receipt';
   import { printCashReport } from '$lib/services/cashReportPrint';
   import { getRoleLabel, getRoleIcon, hasPermission } from '$lib/services/permissions';
@@ -17,6 +17,8 @@
   let closingAmount = $state(0);
   let closingNotes = $state('');
   let lastClosedRegisterId: string | null = $state(null);
+  let expectedInfo: ExpectedClosingInfo | null = $state(null);
+  let loadingExpected = $state(false);
   let businessInfo: BusinessInfo = $state({ name: '', nit: '', address: '', phone: '', city: '' });
 
   // Validation errors
@@ -166,11 +168,24 @@
     showOpenCash = true;
   }
 
-  function closeCashModal() {
-    closingAmount = 0;
+  async function closeCashModal() {
     closingNotes = '';
     closeCashErrors = {};
+    expectedInfo = null;
+    loadingExpected = true;
     showCloseCash = true;
+    try {
+      expectedInfo = await getExpectedClosingAmount();
+      closingAmount = expectedInfo.expected_amount;
+    } catch {
+      closingAmount = 0;
+    }
+    loadingExpected = false;
+  }
+
+  function closingDifference(): number {
+    if (!expectedInfo) return 0;
+    return closingAmount - expectedInfo.expected_amount;
   }
 
   // ─── Users Management ───────────────────────────────────
@@ -836,19 +851,98 @@
 
 {#if showCloseCash}
   <div class="modal-overlay" onclick={() => showCloseCash = false}>
-    <div class="modal" onclick={(e) => e.stopPropagation()}>
+    <div class="modal" onclick={(e) => e.stopPropagation()} style="max-width: 480px;">
       <div class="modal-header"><h3 class="modal-title">🔒 Cerrar Caja</h3></div>
       <div class="modal-body">
-        <div class="input-group">
-          <label class="input-label">Monto en caja (Bs) *</label>
-          <input class="input input-lg" class:input-error={closeCashErrors.amount} type="number" bind:value={closingAmount} oninput={() => { if (closeCashErrors.amount) closeCashErrors = {}; }} min="0" step="0.5" />
-          {#if closeCashErrors.amount}<span class="field-error">{closeCashErrors.amount}</span>{/if}
-        </div>
-        <div class="input-group"><label class="input-label">Notas</label><input class="input" bind:value={closingNotes} placeholder="Observaciones..." /></div>
+        {#if loadingExpected}
+          <div style="text-align: center; padding: var(--space-xl); color: var(--text-muted);">
+            ⏳ Calculando monto esperado...
+          </div>
+        {:else}
+          <!-- Expected amount summary -->
+          {#if expectedInfo}
+            <div style="background: var(--bg-tertiary); border-radius: var(--radius-lg); padding: var(--space-lg); margin-bottom: var(--space-lg);">
+              <div style="font-weight: 700; font-size: var(--font-size-sm); margin-bottom: var(--space-md); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">📊 Resumen del turno</div>
+              <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
+                <div style="display: flex; justify-content: space-between; font-size: var(--font-size-sm);">
+                  <span class="text-muted">Monto apertura</span>
+                  <span>Bs {expectedInfo.opening_amount.toFixed(2)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: var(--font-size-sm);">
+                  <span class="text-muted">Ventas en efectivo/mixto</span>
+                  <span style="color: var(--accent-success); font-weight: 600;">+ Bs {expectedInfo.cash_sales_total.toFixed(2)}</span>
+                </div>
+                {#if expectedInfo.total_sales > expectedInfo.cash_sales_total}
+                  <div style="display: flex; justify-content: space-between; font-size: var(--font-size-xs); opacity: 0.7;">
+                    <span class="text-muted">Ventas totales (incl. tarjeta/QR)</span>
+                    <span>Bs {expectedInfo.total_sales.toFixed(2)}</span>
+                  </div>
+                {/if}
+                <div style="display: flex; justify-content: space-between; font-size: var(--font-size-xs);">
+                  <span class="text-muted">Total transacciones</span>
+                  <span>{expectedInfo.total_transactions}</span>
+                </div>
+                <div style="height: 1px; background: var(--border-color); margin: var(--space-xs) 0;"></div>
+                <div style="display: flex; justify-content: space-between; font-weight: 800; font-size: var(--font-size-md);">
+                  <span>Monto esperado</span>
+                  <span style="color: var(--accent-primary);">Bs {expectedInfo.expected_amount.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+          {/if}
+
+          <!-- Actual amount input -->
+          <div class="input-group">
+            <label class="input-label">💰 Monto real en caja (Bs) *</label>
+            <input class="input input-lg" class:input-error={closeCashErrors.amount} type="number" bind:value={closingAmount} oninput={() => { if (closeCashErrors.amount) closeCashErrors = {}; }} min="0" step="0.5" style="font-size: var(--font-size-lg); font-weight: 700; text-align: center;" />
+            {#if closeCashErrors.amount}<span class="field-error">{closeCashErrors.amount}</span>{/if}
+          </div>
+
+          <!-- Real-time difference indicator -->
+          {#if expectedInfo && closingAmount !== expectedInfo.expected_amount}
+            {@const diff = closingDifference()}
+            <div style="
+              background: {diff >= 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)'};
+              border: 1px solid {diff >= 0 ? 'var(--accent-success)' : 'var(--accent-danger)'};
+              border-radius: var(--radius-md);
+              padding: var(--space-md);
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-top: var(--space-sm);
+            ">
+              <span style="font-size: var(--font-size-sm); font-weight: 600; color: {diff >= 0 ? 'var(--accent-success)' : 'var(--accent-danger)'};">
+                {diff >= 0 ? '📈 Sobrante' : '📉 Faltante'}
+              </span>
+              <span style="font-weight: 800; font-size: var(--font-size-md); color: {diff >= 0 ? 'var(--accent-success)' : 'var(--accent-danger)'};">
+                {diff >= 0 ? '+' : ''}{diff.toFixed(2)} Bs
+              </span>
+            </div>
+          {:else if expectedInfo}
+            <div style="
+              background: rgba(34, 197, 94, 0.05);
+              border: 1px solid rgba(34, 197, 94, 0.2);
+              border-radius: var(--radius-md);
+              padding: var(--space-md);
+              text-align: center;
+              margin-top: var(--space-sm);
+              color: var(--accent-success);
+              font-size: var(--font-size-sm);
+              font-weight: 600;
+            ">
+              ✅ El monto coincide con lo esperado
+            </div>
+          {/if}
+
+          <div class="input-group" style="margin-top: var(--space-md);">
+            <label class="input-label">Notas</label>
+            <input class="input" bind:value={closingNotes} placeholder="Observaciones..." />
+          </div>
+        {/if}
       </div>
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick={() => showCloseCash = false}>Cancelar</button>
-        <button class="btn btn-danger" onclick={handleCloseCash}>🔒 Cerrar</button>
+        <button class="btn btn-danger" onclick={handleCloseCash} disabled={loadingExpected}>🔒 Cerrar Caja</button>
       </div>
     </div>
   </div>

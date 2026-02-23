@@ -95,7 +95,7 @@ Los badges de la columna "Inactividad" usan un semáforo:
 Cualquier entrada, salida o ajuste del producto: una venta, una compra, un ajuste de inventario, una devolución, etc.
 
 ### ¿"Valor a costo" y "Valor a venta" incluyen impuestos?
-No. Son cálculos simples: stock actual × precio de compra, y stock actual × precio de venta. No incluyen IVA ni descuentos.
+No. Son cálculos simples: stock actual × precio de compra, y stock actual × precio de venta. No incluyen impuestos ni descuentos.
 
 ### ¿Aparecen productos con stock 0?
 Sí. Todos los productos activos aparecen, incluso los que tienen stock cero. Esto te ayuda a identificar productos que necesitan reposición.

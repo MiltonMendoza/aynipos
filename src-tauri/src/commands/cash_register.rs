@@ -1,7 +1,58 @@
 use crate::db::Database;
 use crate::db::models::*;
 use tauri::State;
+use serde::Serialize;
 use uuid::Uuid;
+
+#[derive(Debug, Serialize)]
+pub struct ExpectedClosingInfo {
+    pub opening_amount: f64,
+    pub cash_sales_total: f64,
+    pub total_sales: f64,
+    pub expected_amount: f64,
+    pub total_transactions: i64,
+}
+
+#[tauri::command]
+pub fn get_expected_closing_amount(db: State<'_, Database>) -> Result<ExpectedClosingInfo, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+
+    let register_id: String = conn.query_row(
+        "SELECT id FROM cash_registers WHERE closed_at IS NULL ORDER BY opened_at DESC LIMIT 1",
+        [],
+        |row| row.get(0),
+    ).map_err(|_| "No hay caja abierta.".to_string())?;
+
+    let opening_amount: f64 = conn.query_row(
+        "SELECT opening_amount FROM cash_registers WHERE id = ?1",
+        [&register_id],
+        |row| row.get(0),
+    ).map_err(|e| e.to_string())?;
+
+    // Cash/mixed sales (what goes into the physical register)
+    let cash_sales_total: f64 = conn.query_row(
+        "SELECT COALESCE(SUM(total), 0) FROM sales WHERE cash_register_id = ?1 AND status = 'completed' AND payment_method IN ('efectivo', 'mixto')",
+        [&register_id],
+        |row| row.get(0),
+    ).map_err(|e| e.to_string())?;
+
+    // All sales total (including card, qr)
+    let (total_sales, total_transactions): (f64, i64) = conn.query_row(
+        "SELECT COALESCE(SUM(total), 0), COUNT(*) FROM sales WHERE cash_register_id = ?1 AND status = 'completed'",
+        [&register_id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    ).map_err(|e| e.to_string())?;
+
+    let expected_amount = opening_amount + cash_sales_total;
+
+    Ok(ExpectedClosingInfo {
+        opening_amount,
+        cash_sales_total,
+        total_sales,
+        expected_amount,
+        total_transactions,
+    })
+}
 
 #[tauri::command]
 pub fn open_cash_register(db: State<'_, Database>, opening_amount: f64, user_id: String) -> Result<CashRegister, String> {

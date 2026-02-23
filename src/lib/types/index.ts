@@ -177,6 +177,14 @@ export interface CashRegisterReport {
   difference: number;
 }
 
+export interface ExpectedClosingInfo {
+  opening_amount: number;
+  cash_sales_total: number;
+  total_sales: number;
+  expected_amount: number;
+  total_transactions: number;
+}
+
 // ─── Inventory ─────────────────────────────────────────
 
 export interface InventoryMovement {
