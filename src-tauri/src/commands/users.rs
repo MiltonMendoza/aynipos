@@ -122,7 +122,7 @@ pub fn update_user(db: State<'_, Database>, user: UpdateUser) -> Result<(), Stri
         return Ok(());
     }
 
-    updates.push("updated_at = datetime('now')");
+    updates.push("updated_at = datetime('now', '-4 hours')");
 
     let sql = format!("UPDATE users SET {} WHERE id = ?", updates.join(", "));
     params.push(Box::new(user.id.clone()));
@@ -155,7 +155,7 @@ pub fn delete_user(db: State<'_, Database>, id: String) -> Result<(), String> {
     }
 
     conn.execute(
-        "UPDATE users SET is_active = 0, updated_at = datetime('now') WHERE id = ?1",
+        "UPDATE users SET is_active = 0, updated_at = datetime('now', '-4 hours') WHERE id = ?1",
         [&id],
     ).map_err(|e| e.to_string())?;
 

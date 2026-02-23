@@ -51,7 +51,7 @@ pub fn get_inventory(db: State<'_, Database>, low_stock_only: Option<bool>, expi
 
     // Filter expiring (if requested)
     if let Some(days) = expiring_days {
-        let cutoff = chrono::Utc::now() + chrono::Duration::days(days as i64);
+        let cutoff = (chrono::Utc::now() - chrono::Duration::hours(4)) + chrono::Duration::days(days as i64);
         let cutoff_str = cutoff.format("%Y-%m-%d").to_string();
 
         // Get products with expiring inventory
@@ -75,7 +75,7 @@ pub fn get_inventory(db: State<'_, Database>, low_stock_only: Option<bool>, expi
 pub fn get_product_lots(db: State<'_, Database>, product_id: String) -> Result<Vec<InventoryLot>, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let today = (chrono::Utc::now() - chrono::Duration::hours(4)).format("%Y-%m-%d").to_string();
 
     let mut stmt = conn.prepare(
         "SELECT id, product_id, quantity, lot_number, expiry_date, cost_price, updated_at
@@ -148,7 +148,7 @@ pub fn adjust_inventory(
 
         if let Some(inv_id) = existing {
             conn.execute(
-                "UPDATE inventory SET quantity = quantity + ?1, expiry_date = COALESCE(?2, expiry_date), updated_at = datetime('now') WHERE id = ?3",
+                "UPDATE inventory SET quantity = quantity + ?1, expiry_date = COALESCE(?2, expiry_date), updated_at = datetime('now', '-4 hours') WHERE id = ?3",
                 rusqlite::params![quantity, &expiry_date, &inv_id],
             ).map_err(|e| e.to_string())?;
         } else {
@@ -169,7 +169,7 @@ pub fn adjust_inventory(
 
         if let Some(inv_id) = existing {
             conn.execute(
-                "UPDATE inventory SET quantity = quantity + ?1, updated_at = datetime('now') WHERE id = ?2",
+                "UPDATE inventory SET quantity = quantity + ?1, updated_at = datetime('now', '-4 hours') WHERE id = ?2",
                 rusqlite::params![quantity, &inv_id],
             ).map_err(|e| e.to_string())?;
         } else {

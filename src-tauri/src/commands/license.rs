@@ -85,7 +85,7 @@ fn verify_license_key(key: &str, expected_machine_id: &str) -> Result<(String, O
     if license_type == "subscription" && license_expiry != "none" {
         let expiry = chrono::NaiveDate::parse_from_str(license_expiry, "%Y-%m-%d")
             .map_err(|_| "Fecha de expiración inválida".to_string())?;
-        let today = chrono::Utc::now().date_naive();
+        let today = (chrono::Utc::now() - chrono::Duration::hours(4)).date_naive();
         if today > expiry {
             return Err("Esta licencia ha expirado".to_string());
         }
@@ -113,7 +113,7 @@ fn ensure_first_run_date(conn: &rusqlite::Connection) -> Result<String, String> 
     if let Some(date) = existing {
         Ok(date)
     } else {
-        let now = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let now = (chrono::Utc::now() - chrono::Duration::hours(4)).format("%Y-%m-%d").to_string();
         conn.execute(
             "INSERT OR REPLACE INTO settings (key, value) VALUES ('first_run_date', ?1)",
             [&now],
@@ -172,7 +172,7 @@ pub fn get_license_status(db: State<Database>) -> Result<LicenseStatus, String> 
     let first_run = ensure_first_run_date(&conn)?;
     let first_run_date = chrono::NaiveDate::parse_from_str(&first_run, "%Y-%m-%d")
         .map_err(|e| format!("Error de fecha: {}", e))?;
-    let today = chrono::Utc::now().date_naive();
+    let today = (chrono::Utc::now() - chrono::Duration::hours(4)).date_naive();
     let days_elapsed = (today - first_run_date).num_days();
     let days_remaining = TRIAL_DAYS - days_elapsed;
 

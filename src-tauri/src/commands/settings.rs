@@ -26,7 +26,7 @@ pub fn update_setting(db: State<'_, Database>, key: String, value: String) -> Re
 
     conn.execute(
         "INSERT INTO settings (key, value) VALUES (?1, ?2)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')",
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now', '-4 hours')",
         rusqlite::params![&key, &value],
     ).map_err(|e| e.to_string())?;
 
@@ -81,7 +81,7 @@ pub fn create_category(db: State<'_, Database>, category: CreateCategory) -> Res
 #[tauri::command]
 pub fn delete_category(db: State<'_, Database>, id: String) -> Result<(), String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
-    conn.execute("UPDATE categories SET is_active = 0, updated_at = datetime('now') WHERE id = ?1", [&id])
+    conn.execute("UPDATE categories SET is_active = 0, updated_at = datetime('now', '-4 hours') WHERE id = ?1", [&id])
         .map_err(|e| e.to_string())?;
     Ok(())
 }

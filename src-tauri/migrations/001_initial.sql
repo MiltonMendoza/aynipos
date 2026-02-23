@@ -8,7 +8,7 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
-    updated_at TEXT DEFAULT (datetime('now'))
+    updated_at TEXT DEFAULT (datetime('now', '-4 hours'))
 );
 
 -- Product categories (hierarchical)
@@ -19,8 +19,8 @@ CREATE TABLE IF NOT EXISTS categories (
     parent_id TEXT REFERENCES categories(id) ON DELETE SET NULL,
     sort_order INTEGER DEFAULT 0,
     is_active INTEGER DEFAULT 1,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now', '-4 hours')),
+    updated_at TEXT DEFAULT (datetime('now', '-4 hours'))
 );
 
 -- Products
@@ -38,8 +38,8 @@ CREATE TABLE IF NOT EXISTS products (
     min_stock INTEGER DEFAULT 0,
     is_active INTEGER DEFAULT 1,
     metadata TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now', '-4 hours')),
+    updated_at TEXT DEFAULT (datetime('now', '-4 hours'))
 );
 
 -- Inventory / Stock
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS inventory (
     lot_number TEXT,
     expiry_date TEXT,
     cost_price REAL,
-    updated_at TEXT DEFAULT (datetime('now'))
+    updated_at TEXT DEFAULT (datetime('now', '-4 hours'))
 );
 
 -- Customers
@@ -62,8 +62,8 @@ CREATE TABLE IF NOT EXISTS customers (
     phone TEXT,
     address TEXT,
     is_active INTEGER DEFAULT 1,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now', '-4 hours')),
+    updated_at TEXT DEFAULT (datetime('now', '-4 hours'))
 );
 
 -- Cash registers (sessions)
@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS sales (
     cuf TEXT,
     siat_status TEXT DEFAULT 'pending',
     invoice_xml TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now', '-4 hours'))
 );
 
 -- Sale line items
@@ -121,7 +121,7 @@ CREATE TABLE IF NOT EXISTS inventory_movements (
     quantity REAL NOT NULL,
     reference_id TEXT,
     notes TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now', '-4 hours'))
 );
 
 -- SIAT configuration (Phase 3)
@@ -129,7 +129,7 @@ CREATE TABLE IF NOT EXISTS siat_config (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
     expires_at TEXT,
-    updated_at TEXT DEFAULT (datetime('now'))
+    updated_at TEXT DEFAULT (datetime('now', '-4 hours'))
 );
 
 -- Indexes for performance

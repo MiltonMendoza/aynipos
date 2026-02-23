@@ -6,7 +6,7 @@ use tauri::State;
 pub fn get_dashboard_stats(db: State<'_, Database>) -> Result<DashboardStats, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let today = (chrono::Utc::now() - chrono::Duration::hours(4)).format("%Y-%m-%d").to_string();
 
     let total_sales_today: f64 = conn.query_row(
         "SELECT COALESCE(SUM(total), 0) FROM sales WHERE DATE(created_at) = ?1 AND status = 'completed'",
@@ -37,7 +37,7 @@ pub fn get_dashboard_stats(db: State<'_, Database>) -> Result<DashboardStats, St
 
     let expiring_soon_count: i64 = conn.query_row(
         "SELECT COUNT(DISTINCT product_id) FROM inventory
-         WHERE expiry_date IS NOT NULL AND expiry_date <= DATE('now', '+30 days')",
+         WHERE expiry_date IS NOT NULL AND expiry_date <= DATE('now', '-4 hours', '+30 days')",
         [],
         |row| row.get(0),
     ).unwrap_or(0);
@@ -221,7 +221,7 @@ pub fn get_inventory_report(
                 COALESCE(inv.total_stock, 0) * p.sale_price as stock_sale_value,
                 lm.last_date as last_movement_date,
                 CASE WHEN lm.last_date IS NOT NULL
-                     THEN CAST(julianday('now') - julianday(lm.last_date) AS INTEGER)
+                     THEN CAST(julianday('now', '-4 hours') - julianday(lm.last_date) AS INTEGER)
                      ELSE NULL
                 END as days_without_movement
          FROM products p
@@ -241,7 +241,7 @@ pub fn get_inventory_report(
 
     if let Some(days) = inactive_days {
         sql.push_str(&format!(
-            " AND (lm.last_date IS NULL OR CAST(julianday('now') - julianday(lm.last_date) AS INTEGER) >= {})",
+            " AND (lm.last_date IS NULL OR CAST(julianday('now', '-4 hours') - julianday(lm.last_date) AS INTEGER) >= {})",
             days
         ));
     }

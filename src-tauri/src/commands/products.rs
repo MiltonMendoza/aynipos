@@ -215,7 +215,7 @@ pub fn update_product(db: State<'_, Database>, product: UpdateProduct) -> Result
         return Ok(());
     }
 
-    updates.push(format!("updated_at = datetime('now')"));
+    updates.push(format!("updated_at = datetime('now', '-4 hours')"));
     let query = format!(
         "UPDATE products SET {} WHERE id = ?{}",
         updates.join(", "),
@@ -277,7 +277,7 @@ pub fn get_product_by_barcode(db: State<'_, Database>, barcode: String) -> Resul
 pub fn delete_product(db: State<'_, Database>, id: String) -> Result<(), String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     conn.execute(
-        "UPDATE products SET is_active = 0, updated_at = datetime('now') WHERE id = ?1",
+        "UPDATE products SET is_active = 0, updated_at = datetime('now', '-4 hours') WHERE id = ?1",
         [&id],
     ).map_err(|e| e.to_string())?;
     Ok(())

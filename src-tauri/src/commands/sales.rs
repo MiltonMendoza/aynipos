@@ -102,7 +102,7 @@ pub fn create_sale(db: State<'_, Database>, sale: CreateSale) -> Result<Sale, St
 
         // Decrease stock
         conn.execute(
-            "UPDATE inventory SET quantity = quantity - ?1, updated_at = datetime('now')
+            "UPDATE inventory SET quantity = quantity - ?1, updated_at = datetime('now', '-4 hours')
              WHERE product_id = ?2",
             rusqlite::params![si.quantity, &si.product_id],
         ).map_err(|e| e.to_string())?;
@@ -259,7 +259,7 @@ pub fn cancel_sale(db: State<'_, Database>, sale_id: String) -> Result<(), Strin
     // Restore inventory
     for (product_id, quantity) in &items {
         conn.execute(
-            "UPDATE inventory SET quantity = quantity + ?1, updated_at = datetime('now') WHERE product_id = ?2",
+            "UPDATE inventory SET quantity = quantity + ?1, updated_at = datetime('now', '-4 hours') WHERE product_id = ?2",
             rusqlite::params![quantity, product_id],
         ).map_err(|e| e.to_string())?;
 

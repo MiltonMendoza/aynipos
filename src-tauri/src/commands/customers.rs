@@ -65,7 +65,7 @@ pub fn update_customer(db: State<'_, Database>, id: String, customer: CreateCust
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
     conn.execute(
-        "UPDATE customers SET nit = ?1, name = ?2, email = ?3, phone = ?4, address = ?5, updated_at = datetime('now') WHERE id = ?6",
+        "UPDATE customers SET nit = ?1, name = ?2, email = ?3, phone = ?4, address = ?5, updated_at = datetime('now', '-4 hours') WHERE id = ?6",
         rusqlite::params![&customer.nit, &customer.name, &customer.email, &customer.phone, &customer.address, &id],
     ).map_err(|e| e.to_string())?;
 
@@ -75,7 +75,7 @@ pub fn update_customer(db: State<'_, Database>, id: String, customer: CreateCust
 #[tauri::command]
 pub fn delete_customer(db: State<'_, Database>, id: String) -> Result<(), String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
-    conn.execute("UPDATE customers SET is_active = 0, updated_at = datetime('now') WHERE id = ?1", [&id])
+    conn.execute("UPDATE customers SET is_active = 0, updated_at = datetime('now', '-4 hours') WHERE id = ?1", [&id])
         .map_err(|e| e.to_string())?;
     Ok(())
 }

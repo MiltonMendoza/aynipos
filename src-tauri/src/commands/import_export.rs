@@ -249,7 +249,7 @@ pub fn import_products_csv(db: State<'_, Database>, file_path: String) -> Result
                 conn.execute(
                     "UPDATE products SET name = ?1, barcode = ?2, description = ?3, category_id = ?4,
                      purchase_price = ?5, sale_price = ?6, tax_rate = ?7, unit = ?8, min_stock = ?9,
-                     is_active = 1, updated_at = datetime('now')
+                     is_active = 1, updated_at = datetime('now', '-4 hours')
                      WHERE id = ?10",
                     rusqlite::params![
                         &name, &barcode, &description, &category_id,

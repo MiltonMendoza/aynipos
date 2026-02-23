@@ -6,13 +6,14 @@ const MIGRATION_V2: &str = include_str!("../../migrations/002_sale_notes.sql");
 const MIGRATION_V3: &str = include_str!("../../migrations/003_lot_movements.sql");
 const MIGRATION_V4: &str = include_str!("../../migrations/004_users.sql");
 const MIGRATION_V5: &str = include_str!("../../migrations/005_audit_log.sql");
+const MIGRATION_V6: &str = include_str!("../../migrations/006_timezone_bolivia.sql");
 
 pub fn run_migrations(conn: &Connection) -> Result<()> {
     // Create migrations tracking table
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS _migrations (
             version INTEGER PRIMARY KEY,
-            applied_at TEXT DEFAULT (datetime('now'))
+            applied_at TEXT DEFAULT (datetime('now', '-4 hours'))
         );"
     )?;
 
@@ -56,7 +57,13 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.execute("INSERT INTO _migrations (version) VALUES (5)", [])?;
     }
 
-    log::info!("Database at version {}", std::cmp::max(current_version, 5));
+    if current_version < 6 {
+        log::info!("Applying migration v6: timezone Bolivia (UTC-4)");
+        conn.execute_batch(MIGRATION_V6)?;
+        conn.execute("INSERT INTO _migrations (version) VALUES (6)", [])?;
+    }
+
+    log::info!("Database at version {}", std::cmp::max(current_version, 6));
     Ok(())
 }
 

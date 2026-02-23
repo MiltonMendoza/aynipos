@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
     entity_type TEXT,
     entity_id TEXT,
     details TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now', '-4 hours'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id);

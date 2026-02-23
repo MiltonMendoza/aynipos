@@ -77,7 +77,7 @@ pub fn open_cash_register(db: State<'_, Database>, opening_amount: f64, user_id:
     ).map_err(|_| "Usuario no encontrado.".to_string())?;
 
     let id = Uuid::new_v4().to_string();
-    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let now = (chrono::Utc::now() - chrono::Duration::hours(4)).format("%Y-%m-%d %H:%M:%S").to_string();
 
     conn.execute(
         "INSERT INTO cash_registers (id, opened_at, opening_amount, user_id) VALUES (?1, ?2, ?3, ?4)",
@@ -124,7 +124,7 @@ pub fn close_cash_register(db: State<'_, Database>, closing_amount: f64, notes: 
     ).map_err(|e| e.to_string())?;
 
     let expected = opening_amount + sales_total;
-    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let now = (chrono::Utc::now() - chrono::Duration::hours(4)).format("%Y-%m-%d %H:%M:%S").to_string();
 
     conn.execute(
         "UPDATE cash_registers SET closed_at = ?1, closing_amount = ?2, expected_amount = ?3, notes = ?4 WHERE id = ?5",

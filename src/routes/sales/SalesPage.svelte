@@ -82,8 +82,8 @@
     loading = true;
     selectedSale = null;
     try {
-      const from = dateFrom ? dateFrom + 'T00:00:00' : undefined;
-      const to = dateTo ? dateTo + 'T23:59:59' : undefined;
+      const from = dateFrom ? dateFrom + ' 00:00:00' : undefined;
+      const to = dateTo ? dateTo + ' 23:59:59' : undefined;
       const st = statusFilter || undefined;
       sales = await getSales(from, to, st);
     } catch { sales = []; }

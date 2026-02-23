@@ -5,8 +5,8 @@ CREATE TABLE IF NOT EXISTS users (
     pin_hash TEXT NOT NULL,
     role TEXT DEFAULT 'cashier',
     is_active INTEGER DEFAULT 1,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now', '-4 hours')),
+    updated_at TEXT DEFAULT (datetime('now', '-4 hours'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_pin_hash ON users(pin_hash);
