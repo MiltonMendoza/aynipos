@@ -929,7 +929,7 @@
           </div>
         {/if}
         <div class="flex justify-between text-sm">
-          <span class="text-muted">IVA (13%)</span>
+          <span class="text-muted">Débito Fiscal</span>
           <span>{formatCurrency(cartTax())}</span>
         </div>
 

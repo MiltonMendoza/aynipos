@@ -262,7 +262,7 @@ function buildReceiptHTML(sale: Sale, items: SaleItem[], biz: BusinessInfo): str
         <span class="discount-val">-${formatCurrency(sale.discount_amount)}</span>
       </div>` : ''}
       <div class="row">
-        <span>IVA</span>
+        <span>Débito Fiscal</span>
         <span>${formatCurrency(sale.tax_amount)}</span>
       </div>
       <hr class="divider-double">

@@ -32,3 +32,4 @@ src-tauri/Cargo.lock
 
 # ─── Agent ───
 .agent/
+docs/LICENCIAS.md

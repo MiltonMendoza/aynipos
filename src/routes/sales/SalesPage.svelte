@@ -306,7 +306,7 @@
             </div>
           {/if}
           <div class="flex justify-between text-sm" style="margin-bottom: var(--space-xs);">
-            <span class="text-muted">IVA</span>
+            <span class="text-muted">Débito Fiscal</span>
             <span>{formatCurrency(selectedSale.tax_amount)}</span>
           </div>
           <div class="flex justify-between" style="font-size: var(--font-size-lg); font-weight: 800; margin-top: var(--space-md);">

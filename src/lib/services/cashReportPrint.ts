@@ -246,7 +246,7 @@ function buildCashReportHTML(report: CashRegisterReport, biz: BusinessInfo): str
         <span>-${formatCurrency(report.total_discount)}</span>
       </div>` : ''}
       <div class="row">
-        <span>IVA incluido</span>
+        <span>Débito Fiscal</span>
         <span>${formatCurrency(report.total_tax)}</span>
       </div>
       <hr class="divider-double">
