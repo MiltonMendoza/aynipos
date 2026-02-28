@@ -928,10 +928,12 @@
             <span style="color: var(--accent-warning);">−{formatCurrency(totalItemDiscounts())}</span>
           </div>
         {/if}
-        <div class="flex justify-between text-sm">
-          <span class="text-muted">Débito Fiscal</span>
-          <span>{formatCurrency(cartTax())}</span>
-        </div>
+        {#if cartTax() > 0}
+          <div class="flex justify-between text-sm">
+            <span class="text-muted">Débito Fiscal</span>
+            <span>{formatCurrency(cartTax())}</span>
+          </div>
+        {/if}
 
         <!-- Global Discount -->
         {#if !showGlobalDiscount}

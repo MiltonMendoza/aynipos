@@ -29,6 +29,11 @@
     sku: '', name: '', purchase_price: 0, sale_price: 0,
   });
   let newCategoryName = $state('');
+  let showInlineCategoryAdd = $state(false); // for Add Product modal
+  let showInlineCategoryEdit = $state(false); // for Edit Product modal
+  let inlineCategoryName = $state('');
+  let inlineCategoryError = $state('');
+  let inlineCategoryTarget: 'add' | 'edit' = $state('add');
 
   // Validation errors
   let productErrors: Record<string, string> = $state({});
@@ -134,6 +139,42 @@
       showAddCategory = false;
       await loadInventory();
     } catch (e) { alert('Error: ' + e); }
+  }
+
+  async function handleInlineCategory() {
+    if (!inlineCategoryName.trim()) {
+      inlineCategoryError = 'El nombre es obligatorio';
+      return;
+    }
+    try {
+      const created = await createCategory({ name: inlineCategoryName.trim() });
+      await loadInventory();
+      // Auto-select the newly created category
+      if (inlineCategoryTarget === 'add') {
+        newProduct.category_id = created.id;
+        clearProductError('category_id');
+        showInlineCategoryAdd = false;
+      } else {
+        editProduct.category_id = created.id;
+        clearEditError('category_id');
+        showInlineCategoryEdit = false;
+      }
+      inlineCategoryName = '';
+      inlineCategoryError = '';
+    } catch (e) { alert('Error: ' + e); }
+  }
+
+  function openInlineCategory(target: 'add' | 'edit') {
+    inlineCategoryTarget = target;
+    inlineCategoryName = '';
+    inlineCategoryError = '';
+    if (target === 'add') {
+      showInlineCategoryAdd = true;
+      showInlineCategoryEdit = false;
+    } else {
+      showInlineCategoryEdit = true;
+      showInlineCategoryAdd = false;
+    }
   }
 
   function openAdjust(ps: ProductWithStock) {
@@ -450,7 +491,7 @@
 
 <!-- Add Product Modal -->
 {#if showAddProduct}
-  <div class="modal-overlay" onclick={() => showAddProduct = false}>
+  <div class="modal-overlay">
     <div class="modal modal-lg" onclick={(e) => e.stopPropagation()}>
       <div class="modal-header">
         <h3 class="modal-title">➕ Nuevo Producto</h3>
@@ -475,7 +516,23 @@
           {#if productErrors.name}<span class="field-error">{productErrors.name}</span>{/if}
         </div>
         <div class="input-group">
-          <label class="input-label">Categoría *</label>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-xs);">
+            <label class="input-label" style="margin-bottom: 0;">Categoría *</label>
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm"
+              style="font-size: var(--font-size-xs); padding: 2px 8px; color: var(--accent-primary);"
+              onclick={() => openInlineCategory('add')}
+            >
+              {showInlineCategoryAdd ? '✕ Cancelar' : '＋ Nueva categoría'}
+            </button>
+          </div>
+          {#if categories.length === 0 && !showInlineCategoryAdd}
+            <div style="display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-md); background: color-mix(in srgb, var(--accent-warning) 10%, transparent); border: 1px solid color-mix(in srgb, var(--accent-warning) 30%, transparent); border-radius: var(--radius-md); margin-bottom: var(--space-sm);">
+              <span style="font-size: 1.1rem;">💡</span>
+              <span class="text-sm" style="color: var(--text-secondary);">No hay categorías aún. Crea una con el botón <strong>＋ Nueva categoría</strong>.</span>
+            </div>
+          {/if}
           <select class="select" class:input-error={productErrors.category_id} bind:value={newProduct.category_id} onchange={() => clearProductError('category_id')}>
             <option value="">Seleccionar categoría</option>
             {#each categories as cat}
@@ -483,6 +540,26 @@
             {/each}
           </select>
           {#if productErrors.category_id}<span class="field-error">{productErrors.category_id}</span>{/if}
+          {#if showInlineCategoryAdd}
+            <div style="display: flex; gap: var(--space-sm); margin-top: var(--space-sm); padding: var(--space-md); background: color-mix(in srgb, var(--accent-primary) 8%, transparent); border: 1px solid color-mix(in srgb, var(--accent-primary) 25%, transparent); border-radius: var(--radius-md); flex-direction: column;">
+              <div class="text-sm" style="font-weight: 600; color: var(--accent-primary);">Nueva categoría</div>
+              <div style="display: flex; gap: var(--space-sm); align-items: flex-start;">
+                <div style="flex: 1;">
+                  <input
+                    class="input"
+                    class:input-error={!!inlineCategoryError}
+                    bind:value={inlineCategoryName}
+                    placeholder="Ej: Medicamentos"
+                    oninput={() => inlineCategoryError = ''}
+                    onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleInlineCategory(); } }}
+                    style="margin: 0;"
+                  />
+                  {#if inlineCategoryError}<span class="field-error">{inlineCategoryError}</span>{/if}
+                </div>
+                <button type="button" class="btn btn-primary btn-sm" onclick={handleInlineCategory} style="white-space: nowrap;">✓ Crear</button>
+              </div>
+            </div>
+          {/if}
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg);">
           <div class="input-group">
@@ -519,7 +596,7 @@
 
 <!-- Edit Product Modal -->
 {#if showEditProduct}
-  <div class="modal-overlay" onclick={() => showEditProduct = false}>
+  <div class="modal-overlay">
     <div class="modal modal-lg" onclick={(e) => e.stopPropagation()}>
       <div class="modal-header">
         <h3 class="modal-title">✏️ Editar Producto</h3>
@@ -544,14 +621,51 @@
           {#if editErrors.name}<span class="field-error">{editErrors.name}</span>{/if}
         </div>
         <div class="input-group">
-          <label class="input-label">Categoría *</label>
-          <select class="select" class:input-error={editErrors.category_id} bind:value={editProduct.category_id} onchange={() => clearEditError('category_id')}>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-xs);">
+            <label class="input-label" style="margin-bottom: 0;">Categoría *</label>
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm"
+              style="font-size: var(--font-size-xs); padding: 2px 8px; color: var(--accent-primary);"
+              onclick={() => openInlineCategory('edit')}
+            >
+              {showInlineCategoryEdit ? '✕ Cancelar' : '＋ Nueva categoría'}
+            </button>
+          </div>
+          {#if categories.length === 0 && !showInlineCategoryEdit}
+            <div style="display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-md); background: color-mix(in srgb, var(--accent-warning) 10%, transparent); border: 1px solid color-mix(in srgb, var(--accent-warning) 30%, transparent); border-radius: var(--radius-md); margin-bottom: var(--space-sm);">
+              <span style="font-size: 1.1rem;">💡</span>
+              <span class="text-sm" style="color: var(--text-secondary);">No hay categorías aún. Crea una con el botón <strong>＋ Nueva categoría</strong>.</span>
+            </div>
+          {/if}
+          <select class="select" class:input-error={editErrors.category_id} bind:value={editProduct.category_id} onchange={() => clearEditError('category_id')}
+          >
             <option value="">Seleccionar categoría</option>
             {#each categories as cat}
               <option value={cat.id}>{cat.name}</option>
             {/each}
           </select>
           {#if editErrors.category_id}<span class="field-error">{editErrors.category_id}</span>{/if}
+          {#if showInlineCategoryEdit}
+            <div style="display: flex; gap: var(--space-sm); margin-top: var(--space-sm); padding: var(--space-md); background: color-mix(in srgb, var(--accent-primary) 8%, transparent); border: 1px solid color-mix(in srgb, var(--accent-primary) 25%, transparent); border-radius: var(--radius-md); flex-direction: column;">
+              <div class="text-sm" style="font-weight: 600; color: var(--accent-primary);">Nueva categoría</div>
+              <div style="display: flex; gap: var(--space-sm); align-items: flex-start;">
+                <div style="flex: 1;">
+                  <input
+                    class="input"
+                    class:input-error={!!inlineCategoryError}
+                    bind:value={inlineCategoryName}
+                    placeholder="Ej: Medicamentos"
+                    oninput={() => inlineCategoryError = ''}
+                    onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleInlineCategory(); } }}
+                    style="margin: 0;"
+                  />
+                  {#if inlineCategoryError}<span class="field-error">{inlineCategoryError}</span>{/if}
+                </div>
+                <button type="button" class="btn btn-primary btn-sm" onclick={handleInlineCategory} style="white-space: nowrap;">✓ Crear</button>
+              </div>
+            </div>
+          {/if}
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg);">
           <div class="input-group">
@@ -592,7 +706,7 @@
 
 <!-- Add Category Modal -->
 {#if showAddCategory}
-  <div class="modal-overlay" onclick={() => showAddCategory = false}>
+  <div class="modal-overlay">
     <div class="modal" onclick={(e) => e.stopPropagation()}>
       <div class="modal-header">
         <h3 class="modal-title">➕ Nueva Categoría</h3>
@@ -615,7 +729,7 @@
 
 <!-- Adjust Inventory Modal -->
 {#if showAdjust && adjustProduct}
-  <div class="modal-overlay" onclick={() => showAdjust = false}>
+  <div class="modal-overlay">
     <div class="modal" onclick={(e) => e.stopPropagation()}>
       <div class="modal-header">
         <h3 class="modal-title">📊 Ajustar Inventario</h3>
@@ -664,7 +778,7 @@
 
 <!-- Lots Modal -->
 {#if showLots && lotsProduct}
-  <div class="modal-overlay" onclick={() => showLots = false}>
+  <div class="modal-overlay">
     <div class="modal modal-lg" onclick={(e) => e.stopPropagation()}>
       <div class="modal-header">
         <h3 class="modal-title">📦 Lotes — {lotsProduct.product.name}</h3>
@@ -734,7 +848,7 @@
 
 <!-- Movement History Modal -->
 {#if showMovements && movementsProduct}
-  <div class="modal-overlay" onclick={() => showMovements = false}>
+  <div class="modal-overlay">
     <div class="modal modal-lg" onclick={(e) => e.stopPropagation()} style="max-width: 900px;">
       <div class="modal-header">
         <h3 class="modal-title">📜 Historial — {movementsProduct.product.name}</h3>
@@ -803,7 +917,7 @@
 
 <!-- Import Result Modal -->
 {#if showImportResult && importResult}
-  <div class="modal-overlay" onclick={() => showImportResult = false}>
+  <div class="modal-overlay">
     <div class="modal" onclick={(e) => e.stopPropagation()}>
       <div class="modal-header">
         <h3 class="modal-title">📥 Resultado de Importación</h3>

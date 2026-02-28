@@ -261,10 +261,11 @@ function buildReceiptHTML(sale: Sale, items: SaleItem[], biz: BusinessInfo): str
         <span>Desc. global</span>
         <span class="discount-val">-${formatCurrency(sale.discount_amount)}</span>
       </div>` : ''}
+      ${sale.tax_amount > 0 ? `
       <div class="row">
         <span>Débito Fiscal</span>
         <span>${formatCurrency(sale.tax_amount)}</span>
-      </div>
+      </div>` : ''}
       <hr class="divider-double">
       <div class="row grand-total">
         <span>TOTAL</span>

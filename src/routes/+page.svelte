@@ -9,6 +9,7 @@
   let currentRoute: AppRoute = $state('pos');
   let lowStockBadge = $state(0);
   let showShortcuts = $state(false);
+  let showAbout = $state(false);
   let currentUser: User | null = $state(null);
   let licenseStatus: LicenseStatus | null = $state(null);
   let licenseLoading = $state(true);
@@ -171,6 +172,13 @@
       >
         ⌨️ Atajos (F10)
       </button>
+      <button
+        class="btn btn-ghost btn-sm"
+        style="width: 100%; margin-top: var(--space-xs); font-size: var(--font-size-xs); color: var(--text-muted);"
+        onclick={() => showAbout = true}
+      >
+        ℹ️ Acerca de AyniPOS
+      </button>
     </div>
   </aside>
 
@@ -203,6 +211,13 @@
     {/if}
   </main>
 </div>
+
+<!-- About Modal -->
+{#if showAbout}
+  {#await import('./about/AboutModal.svelte') then { default: AboutModal }}
+    <AboutModal onClose={() => showAbout = false} />
+  {/await}
+{/if}
 
 <!-- Shortcuts Cheat Sheet -->
 {#if showShortcuts}

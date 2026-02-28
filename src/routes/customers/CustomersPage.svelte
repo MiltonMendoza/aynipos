@@ -124,7 +124,7 @@
 </div>
 
 {#if showModal}
-  <div class="modal-overlay" onclick={() => showModal = false}>
+  <div class="modal-overlay">
     <div class="modal" onclick={(e) => e.stopPropagation()}>
       <div class="modal-header">
         <h3 class="modal-title">{editing ? '✏️ Editar' : '➕ Nuevo'} Cliente</h3>

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "AyniPOS",
-  "version": "0.1.0",
+  "version": "1.7.0",
   "identifier": "com.milmen.aynipos",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "AyniPOS — Punto de Venta",
+        "title": "AyniPOS v1.7.0 — Punto de Venta",
         "width": 1280,
         "height": 800,
         "minWidth": 1024,

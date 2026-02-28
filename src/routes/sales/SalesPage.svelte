@@ -305,10 +305,12 @@
               <span style="color: var(--accent-warning);">−{formatCurrency(selectedSale.discount_amount)}</span>
             </div>
           {/if}
-          <div class="flex justify-between text-sm" style="margin-bottom: var(--space-xs);">
-            <span class="text-muted">Débito Fiscal</span>
-            <span>{formatCurrency(selectedSale.tax_amount)}</span>
-          </div>
+          {#if selectedSale.tax_amount > 0}
+            <div class="flex justify-between text-sm" style="margin-bottom: var(--space-xs);">
+              <span class="text-muted">Débito Fiscal</span>
+              <span>{formatCurrency(selectedSale.tax_amount)}</span>
+            </div>
+          {/if}
           <div class="flex justify-between" style="font-size: var(--font-size-lg); font-weight: 800; margin-top: var(--space-md);">
             <span>Total</span>
             <span style="color: var(--accent-success);">{formatCurrency(selectedSale.total)}</span>
