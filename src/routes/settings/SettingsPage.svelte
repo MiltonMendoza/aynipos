@@ -468,7 +468,17 @@
       setTimeout(() => { licenseCopied = false; }, 2000);
     }
   }
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      if (showOpenCash) showOpenCash = false;
+      else if (showCloseCash) showCloseCash = false;
+      else if (showUserModal) showUserModal = false;
+      else if (showActivateModal) showActivateModal = false;
+    }
+  }
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <div class="page">
   <div class="page-header">

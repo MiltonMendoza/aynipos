@@ -14,7 +14,15 @@
       onClose();
     }
   }
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      onClose();
+    }
+  }
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 <div class="modal-overlay" onclick={handleBackdrop}>
@@ -48,21 +56,21 @@
         <span class="about-info-icon">🌐</span>
         <div>
           <div class="about-info-label">Sitio web</div>
-          <div class="about-info-value about-link">valnextech.com</div>
+          <div class="about-info-value about-link">valnex.netlify.app</div>
         </div>
       </div>
       <div class="about-info-row">
         <span class="about-info-icon">📞</span>
         <div>
           <div class="about-info-label">Soporte (WhatsApp)</div>
-          <div class="about-info-value about-link">+591 — — — — — —</div>
+          <div class="about-info-value about-link">+59173708821</div>
         </div>
       </div>
       <div class="about-info-row">
         <span class="about-info-icon">✉️</span>
         <div>
           <div class="about-info-label">Correo</div>
-          <div class="about-info-value about-link">contacto@valnextech.com</div>
+          <div class="about-info-value about-link">valnex.tech@kre-a.net</div>
         </div>
       </div>
     </div>

@@ -73,7 +73,14 @@
       await loadCustomers();
     } catch (e) { alert('Error: ' + e); }
   }
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && showModal) {
+      showModal = false;
+    }
+  }
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <div class="page">
   <div class="page-header">

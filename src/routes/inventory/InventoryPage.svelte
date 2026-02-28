@@ -403,7 +403,22 @@
   $effect(() => {
     loadInventory();
   });
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      if (showAddCategory) showAddCategory = false;
+      else if (showInlineCategoryAdd) showInlineCategoryAdd = false;
+      else if (showInlineCategoryEdit) showInlineCategoryEdit = false;
+      else if (showAddProduct) showAddProduct = false;
+      else if (showEditProduct) showEditProduct = false;
+      else if (showAdjust) showAdjust = false;
+      else if (showLots) showLots = false;
+      else if (showMovements) showMovements = false;
+      else if (showImportResult) showImportResult = false;
+    }
+  }
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <div class="page">
   <div class="page-header">
@@ -512,7 +527,7 @@
         </div>
         <div class="input-group">
           <label class="input-label">Nombre del producto *</label>
-          <input class="input" class:input-error={productErrors.name} bind:value={newProduct.name} oninput={() => clearProductError('name')} placeholder="Paracetamol 500mg" />
+          <input class="input" class:input-error={productErrors.name} bind:value={newProduct.name} oninput={() => clearProductError('name')} placeholder="Ej: Zapatillas Deportivas XYZ" />
           {#if productErrors.name}<span class="field-error">{productErrors.name}</span>{/if}
         </div>
         <div class="input-group">
@@ -549,7 +564,7 @@
                     class="input"
                     class:input-error={!!inlineCategoryError}
                     bind:value={inlineCategoryName}
-                    placeholder="Ej: Medicamentos"
+                    placeholder="Ej: Ropa, Electrónica"
                     oninput={() => inlineCategoryError = ''}
                     onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleInlineCategory(); } }}
                     style="margin: 0;"
@@ -617,7 +632,7 @@
         </div>
         <div class="input-group">
           <label class="input-label">Nombre del producto *</label>
-          <input class="input" class:input-error={editErrors.name} bind:value={editProduct.name} oninput={() => clearEditError('name')} placeholder="Paracetamol 500mg" />
+          <input class="input" class:input-error={editErrors.name} bind:value={editProduct.name} oninput={() => clearEditError('name')} placeholder="Ej: Zapatillas Deportivas XYZ" />
           {#if editErrors.name}<span class="field-error">{editErrors.name}</span>{/if}
         </div>
         <div class="input-group">
@@ -655,7 +670,7 @@
                     class="input"
                     class:input-error={!!inlineCategoryError}
                     bind:value={inlineCategoryName}
-                    placeholder="Ej: Medicamentos"
+                    placeholder="Ej: Ropa, Electrónica"
                     oninput={() => inlineCategoryError = ''}
                     onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleInlineCategory(); } }}
                     style="margin: 0;"
@@ -715,7 +730,7 @@
       <div class="modal-body">
         <div class="input-group">
           <label class="input-label">Nombre *</label>
-          <input class="input" class:input-error={categoryErrors.name} bind:value={newCategoryName} oninput={() => { if (categoryErrors.name) categoryErrors = {}; }} placeholder="Medicamentos" />
+          <input class="input" class:input-error={categoryErrors.name} bind:value={newCategoryName} oninput={() => { if (categoryErrors.name) categoryErrors = {}; }} placeholder="Ej: Ropa, Electrónica" />
           {#if categoryErrors.name}<span class="field-error">{categoryErrors.name}</span>{/if}
         </div>
       </div>
