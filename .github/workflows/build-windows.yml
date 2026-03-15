@@ -146,7 +146,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
 
       # Activar el toolchain Rust 1.77.2 especial para Win7
       - name: Activate Win7 Rust toolchain
@@ -172,6 +172,12 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm install
+
+      # `time` >= 0.3.37 requiere edition2024 (Rust 1.85+) — incompatible con Rust 1.77.2.
+      # Pinamos explícitamente a 0.3.36 que es la última versión compatible con Win7.
+      - name: Pin 'time' crate for Rust 1.77.2 compatibility
+        working-directory: src-tauri
+        run: cargo update -p time --precise 0.3.36
 
       - name: Build Tauri app (NSIS installer — Win7)
         run: npx tauri build --bundles nsis
