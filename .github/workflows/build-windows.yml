@@ -9,11 +9,44 @@ on:
       - 'v*'
 
 jobs:
-  build-windows:
+  # ─────────────────────────────────────────────────────────
+  # Job 1: Tests del backend Rust (rápido, corre en Linux)
+  # ─────────────────────────────────────────────────────────
+  test:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system dependencies (Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Run backend tests
+        working-directory: src-tauri
+        run: cargo test --lib -- --test-output immediate
+
+  # ─────────────────────────────────────────────────────────
+  # Job 2: Build moderno (Windows 10/11) — Rust stable
+  # ─────────────────────────────────────────────────────────
+  build-modern:
+    name: Build (Windows 10/11)
     runs-on: windows-latest
-    
+    needs: test
+
     permissions:
-      contents: write  # Necesario para crear releases
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -31,6 +64,7 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
+          key: modern
 
       - name: Install frontend dependencies
         run: npm install
@@ -43,38 +77,21 @@ jobs:
         run: |
           Write-Host "=== Archivos generados en bundle ==="
           Get-ChildItem -Path "src-tauri/target/release/bundle" -Recurse -File | ForEach-Object {
-            Write-Host "$($_.FullName) — $($_.Length) bytes — Extension: '$($_.Extension)'"
+            Write-Host "$($_.FullName) — $($_.Length) bytes"
           }
 
       - name: Prepare installer for upload
         shell: pwsh
         run: |
-          # Crear carpeta de salida
           New-Item -ItemType Directory -Force -Path "installer-output"
-          
-          # Buscar el .exe generado por NSIS
           $nsisFiles = Get-ChildItem -Path "src-tauri/target/release/bundle/nsis" -Filter "*.exe" -File
-          
           if ($nsisFiles.Count -eq 0) {
-            Write-Host "ERROR: No se encontraron archivos .exe en la carpeta NSIS"
-            # Listar todo lo que hay en la carpeta para diagnosticar
-            Write-Host "Contenido de bundle/nsis:"
-            Get-ChildItem -Path "src-tauri/target/release/bundle/nsis" -Recurse | ForEach-Object {
-              Write-Host "  $($_.FullName) — IsDir: $($_.PSIsContainer) — Size: $($_.Length)"
-            }
+            Write-Host "ERROR: No se encontraron archivos .exe"
             exit 1
           }
-          
           foreach ($file in $nsisFiles) {
-            $newName = "AyniPOS-Installer-Windows.exe"
-            Copy-Item $file.FullName -Destination "installer-output/$newName"
-            Write-Host "Copiado: $($file.FullName) -> installer-output/$newName ($($file.Length) bytes)"
-          }
-          
-          Write-Host ""
-          Write-Host "=== Contenido final de installer-output ==="
-          Get-ChildItem -Path "installer-output" -File | ForEach-Object {
-            Write-Host "$($_.Name) — $($_.Length) bytes — Extension: '$($_.Extension)'"
+            Copy-Item $file.FullName -Destination "installer-output/AyniPOS-Installer-Windows.exe"
+            Write-Host "Copiado: $($file.FullName) -> installer-output/AyniPOS-Installer-Windows.exe ($($file.Length) bytes)"
           }
 
       - name: Upload installer artifact
@@ -85,20 +102,117 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
-      - name: Create GitHub Release
+      - name: Create GitHub Release (modern)
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
           name: "AyniPOS ${{ github.ref_name }}"
           body: |
             ## AyniPOS ${{ github.ref_name }}
-            
+
             ### Instalación
-            1. Descarga el archivo `AyniPOS-Installer-Windows.exe`
+            Descarga el instalador según tu sistema operativo:
+
+            | Archivo | Compatible con |
+            |---------|----------------|
+            | `AyniPOS-Installer-Windows.exe` | Windows 10 / Windows 11 |
+            | `AyniPOS-Installer-Win7.exe` | Windows 7 SP1 |
+
+            ### Pasos
+            1. Descarga el archivo correspondiente
             2. Ejecuta el instalador
             3. Sigue las instrucciones en pantalla
           draft: true
           prerelease: false
           files: installer-output/AyniPOS-Installer-Windows.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ─────────────────────────────────────────────────────────
+  # Job 3: Build Win7 — Rust 1.77.2 + embedBootstrapper
+  # ─────────────────────────────────────────────────────────
+  build-win7:
+    name: Build (Windows 7 SP1)
+    runs-on: windows-latest
+    needs: test
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Activar el toolchain Rust 1.77.2 especial para Win7
+      - name: Activate Win7 Rust toolchain
+        shell: pwsh
+        run: |
+          Copy-Item "rust-toolchain-win7.toml" -Destination "rust-toolchain.toml"
+          Write-Host "Toolchain Win7 activado (Rust 1.77.2)"
+
+      - name: Install Rust 1.77.2 (Win7 compatible)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.77.2"
+          targets: x86_64-pc-windows-msvc
+
+      - name: Verify Rust version
+        run: rustc --version
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          key: win7
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Build Tauri app (NSIS installer — Win7)
+        run: npx tauri build --bundles nsis
+
+      - name: List generated artifacts
+        shell: pwsh
+        run: |
+          Write-Host "=== Archivos generados en bundle ==="
+          Get-ChildItem -Path "src-tauri/target/release/bundle" -Recurse -File | ForEach-Object {
+            Write-Host "$($_.FullName) — $($_.Length) bytes"
+          }
+
+      - name: Prepare Win7 installer for upload
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "installer-output"
+          $nsisFiles = Get-ChildItem -Path "src-tauri/target/release/bundle/nsis" -Filter "*.exe" -File
+          if ($nsisFiles.Count -eq 0) {
+            Write-Host "ERROR: No se encontraron archivos .exe"
+            exit 1
+          }
+          foreach ($file in $nsisFiles) {
+            Copy-Item $file.FullName -Destination "installer-output/AyniPOS-Installer-Win7.exe"
+            Write-Host "Copiado: $($file.FullName) -> installer-output/AyniPOS-Installer-Win7.exe ($($file.Length) bytes)"
+          }
+
+      - name: Upload Win7 installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AyniPOS-Installer-Win7.exe
+          path: installer-output/AyniPOS-Installer-Win7.exe
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Add Win7 installer to GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "AyniPOS ${{ github.ref_name }}"
+          draft: true
+          prerelease: false
+          files: installer-output/AyniPOS-Installer-Win7.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

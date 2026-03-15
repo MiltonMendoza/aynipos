@@ -1,0 +1,6 @@
+# Toolchain fijado para builds de Windows 7.
+# Este archivo NO debe llamarse rust-toolchain.toml para no afectar
+# a los desarrolladores locales. El CI de Win7 lo copia/activa manualmente.
+[toolchain]
+channel = "1.77.2"
+targets = ["x86_64-pc-windows-msvc"]

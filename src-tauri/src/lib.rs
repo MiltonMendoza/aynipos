@@ -1,6 +1,9 @@
 mod db;
 mod commands;
 
+#[cfg(test)]
+mod tests;
+
 use db::Database;
 use tauri::Manager;
 
