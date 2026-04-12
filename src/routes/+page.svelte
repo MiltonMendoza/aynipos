@@ -1,8 +1,10 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import '../app.css';
   import type { AppRoute, User, LicenseStatus } from '$lib/types';
   import { canAccessRoute, getDefaultRoute, getRoleLabel, getRoleIcon } from '$lib/services/permissions';
-  import { logAction, getLicenseStatus } from '$lib/services/api';
+  import { logAction, getLicenseStatus, getSettings, updateSetting } from '$lib/services/api';
+  import { applyUiTheme, DEFAULT_UI_THEME, getUiThemeFromSettings, UI_THEME_SETTING_KEY } from '$lib/services/theme';
 
   let { children } = $props();
 
@@ -14,10 +16,25 @@
   let licenseStatus: LicenseStatus | null = $state(null);
   let licenseLoading = $state(true);
 
-  // Check license on mount
-  $effect(() => {
-    checkLicense();
+  onMount(() => {
+    void bootstrapUiTheme();
+    void checkLicense();
   });
+
+  async function bootstrapUiTheme() {
+    try {
+      const settings = await getSettings();
+      const { resolvedTheme, needsPersist } = getUiThemeFromSettings(settings);
+      applyUiTheme(resolvedTheme);
+
+      if (needsPersist) {
+        await updateSetting(UI_THEME_SETTING_KEY, resolvedTheme);
+      }
+    } catch (e) {
+      console.error('Theme bootstrap failed:', e);
+      applyUiTheme(DEFAULT_UI_THEME);
+    }
+  }
 
   async function checkLicense() {
     licenseLoading = true;

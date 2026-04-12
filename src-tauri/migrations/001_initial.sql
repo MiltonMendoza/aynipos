@@ -156,6 +156,7 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     ('tax_rate', '0.13'),
     ('currency', 'BOB'),
     ('currency_symbol', 'Bs'),
+    ('ui_theme', 'light-modern'),
     ('sale_number_sequence', '0'),
     ('siat_environment', 'pilot');
 

@@ -131,7 +131,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #0f1117 0%, #1a1d2e 50%, #0f1117 100%);
+    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-tertiary) 50%, var(--bg-primary) 100%);
     z-index: 9999;
   }
 
@@ -141,10 +141,10 @@
     align-items: center;
     gap: 1.5rem;
     padding: 2.5rem;
-    background: var(--bg-secondary, #1a1d2e);
-    border: 1px solid var(--border-color, #2a2d3e);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
     border-radius: 1.5rem;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 80px rgba(59, 130, 246, 0.08);
+    box-shadow: var(--shadow-xl), 0 0 60px var(--accent-primary-glow);
     width: 340px;
     transition: transform 0.1s;
   }
@@ -169,7 +169,7 @@
   .login-logo-icon {
     width: 64px;
     height: 64px;
-    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    background: var(--gradient-brand);
     border-radius: 1rem;
     display: flex;
     align-items: center;
@@ -177,19 +177,19 @@
     font-size: 2rem;
     font-weight: 800;
     color: white;
-    box-shadow: 0 8px 24px rgba(59, 130, 246, 0.3);
+    box-shadow: 0 8px 24px var(--accent-primary-glow);
   }
 
   .login-title {
     font-size: 1.5rem;
     font-weight: 700;
-    color: var(--text-primary, #e2e8f0);
+    color: var(--text-primary);
     margin: 0;
   }
 
   .login-subtitle {
     font-size: 0.85rem;
-    color: var(--text-muted, #64748b);
+    color: var(--text-muted);
     margin: 0;
   }
 
@@ -203,36 +203,36 @@
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    border: 2px solid var(--border-color, #2a2d3e);
+    border: 2px solid var(--border-color);
     background: transparent;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .pin-dot.filled {
-    background: #3b82f6;
-    border-color: #3b82f6;
-    box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--accent-primary) 35%, transparent);
     transform: scale(1.1);
   }
 
   .pin-dot.active {
-    border-color: #3b82f6;
+    border-color: var(--accent-primary);
     animation: pulse 1.5s infinite;
   }
 
   @keyframes pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.3); }
-    50% { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-primary) 28%, transparent); }
+    50% { box-shadow: 0 0 0 6px transparent; }
   }
 
   .login-error {
-    color: #ef4444;
+    color: var(--accent-danger);
     font-size: 0.85rem;
     font-weight: 500;
     padding: 0.4rem 1rem;
-    background: rgba(239, 68, 68, 0.1);
+    background: var(--accent-danger-glow);
     border-radius: 0.5rem;
-    border: 1px solid rgba(239, 68, 68, 0.2);
+    border: 1px solid color-mix(in srgb, var(--accent-danger) 28%, transparent);
   }
 
   .numpad {
@@ -244,10 +244,10 @@
 
   .numpad-btn {
     height: 56px;
-    border: 1px solid var(--border-color, #2a2d3e);
+    border: 1px solid var(--border-color);
     border-radius: 0.75rem;
-    background: var(--bg-tertiary, #252836);
-    color: var(--text-primary, #e2e8f0);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
     font-size: 1.25rem;
     font-weight: 600;
     cursor: pointer;
@@ -257,14 +257,14 @@
   }
 
   .numpad-btn:hover:not(:disabled) {
-    background: var(--bg-hover, #2a2d3e);
-    border-color: #3b82f6;
+    background: var(--bg-hover);
+    border-color: var(--accent-primary);
     transform: scale(1.02);
   }
 
   .numpad-btn:active:not(:disabled) {
     transform: scale(0.96);
-    background: rgba(59, 130, 246, 0.15);
+    background: var(--accent-primary-glow);
   }
 
   .numpad-btn:disabled {
@@ -274,7 +274,7 @@
 
   .numpad-fn {
     font-size: 0.9rem;
-    color: var(--text-muted, #64748b);
+    color: var(--text-muted);
   }
 
   .login-submit {
@@ -287,7 +287,7 @@
 
   .login-hint {
     font-size: 0.75rem;
-    color: var(--text-muted, #64748b);
+    color: var(--text-muted);
     margin: 0;
     opacity: 0.6;
   }

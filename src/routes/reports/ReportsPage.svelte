@@ -673,12 +673,12 @@
         <svg viewBox="0 0 {CHART_W} {CHART_H}" class="chart-svg" onmouseleave={() => hoveredBar = null}>
           <defs>
             <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#8b5cf6" />
-              <stop offset="100%" stop-color="#3b82f6" />
+              <stop offset="0%" stop-color="var(--accent-info)" />
+              <stop offset="100%" stop-color="var(--accent-primary)" />
             </linearGradient>
             <linearGradient id="barGradHover" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#a78bfa" />
-              <stop offset="100%" stop-color="#60a5fa" />
+              <stop offset="0%" stop-color="color-mix(in srgb, var(--accent-info) 75%, white)" />
+              <stop offset="100%" stop-color="color-mix(in srgb, var(--accent-primary) 75%, white)" />
             </linearGradient>
           </defs>
 
@@ -1255,13 +1255,13 @@
   }
   .chart-trend {
     fill: none;
-    stroke: #10b981;
+    stroke: var(--chart-trend-color);
     stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;
   }
   .chart-trend-dot {
-    fill: #10b981;
+    fill: var(--chart-trend-color);
     stroke: var(--bg-primary);
     stroke-width: 2;
     transition: r 0.15s;
@@ -1270,7 +1270,7 @@
     fill: var(--bg-tertiary);
     stroke: var(--border-primary);
     stroke-width: 1;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+    filter: drop-shadow(0 2px 4px rgba(15, 23, 42, 0.2));
   }
   .chart-tooltip-text {
     fill: var(--text-primary);
@@ -1421,7 +1421,7 @@
   }
   .top-bar-fill {
     height: 100%;
-    background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+    background: var(--gradient-brand-soft);
     border-radius: 3px;
     transition: width 0.4s ease;
   }

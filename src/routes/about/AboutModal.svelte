@@ -109,14 +109,14 @@
     width: 52px;
     height: 52px;
     border-radius: var(--radius-lg);
-    background: linear-gradient(135deg, var(--accent-blue), #6366f1);
+    background: var(--gradient-brand);
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 1.75rem;
     font-weight: 800;
     color: white;
-    box-shadow: 0 4px 16px rgba(59, 130, 246, 0.35);
+    box-shadow: 0 4px 16px var(--accent-primary-glow);
   }
 
   .about-title-block {
@@ -135,9 +135,9 @@
 
   .about-version-badge {
     display: inline-block;
-    background: rgba(59, 130, 246, 0.15);
-    color: var(--accent-blue);
-    border: 1px solid rgba(59, 130, 246, 0.3);
+    background: var(--accent-primary-glow);
+    color: var(--accent-primary);
+    border: 1px solid color-mix(in srgb, var(--accent-primary) 28%, transparent);
     border-radius: var(--radius-full);
     padding: 2px 10px;
     font-size: var(--font-size-xs);
@@ -216,7 +216,7 @@
   }
 
   .about-link {
-    color: var(--accent-blue);
+    color: var(--accent-primary);
     cursor: pointer;
   }
 

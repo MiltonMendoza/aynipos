@@ -131,7 +131,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #0f1117 0%, #1a1d2e 50%, #0f1117 100%);
+    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-tertiary) 50%, var(--bg-primary) 100%);
     z-index: 9999;
   }
 
@@ -141,10 +141,10 @@
     align-items: center;
     gap: 1.25rem;
     padding: 2.5rem;
-    background: var(--bg-secondary, #1a1d2e);
-    border: 1px solid var(--border-color, #2a2d3e);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
     border-radius: 1.5rem;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 80px rgba(239, 68, 68, 0.08);
+    box-shadow: var(--shadow-xl), 0 0 60px var(--accent-danger-glow);
     width: 420px;
     max-width: 95vw;
   }
@@ -159,7 +159,7 @@
   .activation-logo-icon {
     width: 64px;
     height: 64px;
-    background: linear-gradient(135deg, #ef4444, #f59e0b);
+    background: linear-gradient(135deg, var(--accent-danger), var(--accent-warning));
     border-radius: 1rem;
     display: flex;
     align-items: center;
@@ -167,19 +167,19 @@
     font-size: 2rem;
     font-weight: 800;
     color: white;
-    box-shadow: 0 8px 24px rgba(239, 68, 68, 0.3);
+    box-shadow: 0 8px 24px var(--accent-danger-glow);
   }
 
   .activation-title {
     font-size: 1.5rem;
     font-weight: 700;
-    color: var(--text-primary, #e2e8f0);
+    color: var(--text-primary);
     margin: 0;
   }
 
   .activation-subtitle {
     font-size: 0.85rem;
-    color: var(--text-muted, #64748b);
+    color: var(--text-muted);
     margin: 0;
   }
 
@@ -188,11 +188,11 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.75rem 1rem;
-    background: rgba(245, 158, 11, 0.1);
-    border: 1px solid rgba(245, 158, 11, 0.25);
+    background: var(--accent-warning-glow);
+    border: 1px solid color-mix(in srgb, var(--accent-warning) 25%, transparent);
     border-radius: 0.75rem;
     font-size: 0.8rem;
-    color: #fbbf24;
+    color: var(--accent-warning);
     line-height: 1.4;
     width: 100%;
   }
@@ -209,7 +209,7 @@
 
   .machine-id-label {
     font-size: 0.75rem;
-    color: var(--text-muted, #64748b);
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     font-weight: 600;
@@ -227,17 +227,17 @@
     font-size: 1.5rem;
     font-weight: 700;
     letter-spacing: 0.15em;
-    color: #3b82f6;
-    background: rgba(59, 130, 246, 0.1);
+    color: var(--accent-primary);
+    background: var(--accent-primary-glow);
     padding: 0.5rem 1rem;
     border-radius: 0.5rem;
-    border: 1px solid rgba(59, 130, 246, 0.2);
+    border: 1px solid color-mix(in srgb, var(--accent-primary) 25%, transparent);
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
   }
 
   .btn-copy {
-    background: var(--bg-tertiary, #252836);
-    border: 1px solid var(--border-color, #2a2d3e);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
     border-radius: 0.5rem;
     padding: 0.5rem;
     font-size: 1.2rem;
@@ -247,13 +247,13 @@
   }
 
   .btn-copy:hover {
-    background: var(--bg-hover, #2a2d3e);
-    border-color: #3b82f6;
+    background: var(--bg-hover);
+    border-color: var(--accent-primary);
   }
 
   .machine-id-hint {
     font-size: 0.7rem;
-    color: var(--text-muted, #64748b);
+    color: var(--text-muted);
     margin: 0.5rem 0 0;
     opacity: 0.7;
   }
@@ -265,7 +265,7 @@
   .license-label {
     font-size: 0.8rem;
     font-weight: 600;
-    color: var(--text-secondary, #94a3b8);
+    color: var(--text-secondary);
     display: block;
     margin-bottom: 0.5rem;
   }
@@ -273,10 +273,10 @@
   .license-input {
     width: 100%;
     padding: 0.75rem;
-    background: var(--bg-tertiary, #252836);
-    border: 1px solid var(--border-color, #2a2d3e);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
     border-radius: 0.5rem;
-    color: var(--text-primary, #e2e8f0);
+    color: var(--text-primary);
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
     font-size: 0.8rem;
     resize: none;
@@ -286,23 +286,23 @@
 
   .license-input:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-primary) 22%, transparent);
   }
 
   .license-input::placeholder {
-    color: var(--text-muted, #64748b);
+    color: var(--text-muted);
     opacity: 0.6;
   }
 
   .activation-error {
-    color: #ef4444;
+    color: var(--accent-danger);
     font-size: 0.8rem;
     font-weight: 500;
     padding: 0.5rem 1rem;
-    background: rgba(239, 68, 68, 0.1);
+    background: var(--accent-danger-glow);
     border-radius: 0.5rem;
-    border: 1px solid rgba(239, 68, 68, 0.2);
+    border: 1px solid color-mix(in srgb, var(--accent-danger) 25%, transparent);
     width: 100%;
     text-align: center;
   }
@@ -317,7 +317,7 @@
 
   .activation-contact {
     font-size: 0.75rem;
-    color: var(--text-muted, #64748b);
+    color: var(--text-muted);
     margin: 0;
     opacity: 0.6;
   }
