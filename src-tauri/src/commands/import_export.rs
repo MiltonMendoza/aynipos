@@ -166,7 +166,6 @@ pub fn import_products_csv(db: State<'_, Database>, file_path: String) -> Result
     // ── Columnas opcionales de migración de vencimiento ──────────────────
     let idx_expiry       = col("fecha_vencimiento");
     let idx_lot_num      = col("lote");
-    let idx_lot_qty      = col("cantidad_lote");
 
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let mut result = ImportResult {
@@ -259,8 +258,6 @@ pub fn import_products_csv(db: State<'_, Database>, file_path: String) -> Result
         let expiry_raw  = get_optional(&record, idx_expiry);
         let lot_number  = get_optional(&record, idx_lot_num)
             .unwrap_or_else(|| "MIGRACIÓN".to_string());
-        let lot_qty: f64 = get_optional(&record, idx_lot_qty)
-            .and_then(|s| s.parse().ok()).unwrap_or(0.0);
         let expiry_date = expiry_raw.as_deref().and_then(parse_date);
 
         // Advertir si la fecha vino pero no pudo parsearse
@@ -393,15 +390,13 @@ pub fn import_products_csv(db: State<'_, Database>, file_path: String) -> Result
 
                 if let Some(lot_id) = main_lot_id {
                     // Actualizar el lote principal con la fecha y número de lote del CSV
-                    let lot_label = get_optional(&record, idx_lot_num)
-                        .unwrap_or_else(|| "MIGRACIÓN".to_string());
                     conn.execute(
                         "UPDATE inventory
                          SET expiry_date = ?1,
                              lot_number = CASE WHEN lot_number IS NULL OR lot_number = '' THEN ?2 ELSE lot_number END,
                              updated_at = datetime('now', '-4 hours')
                          WHERE id = ?3",
-                        rusqlite::params![expiry, &lot_label, &lot_id],
+                        rusqlite::params![expiry, &lot_number, &lot_id],
                     ).map_err(|e| format!("Error al actualizar lote de SKU '{}': {}", sku, e))?;
                     result.lots_created += 1;
                 }

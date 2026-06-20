@@ -1,6 +1,4 @@
 use crate::db::Database;
-use crate::db::models::*;
-use rusqlite::OptionalExtension;
 use tauri::State;
 use uuid::Uuid;
 
