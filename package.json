@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:dev": "PATH=\"/Users/milmen/.cargo/bin:/Users/milmen/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH\" RUSTUP_HOME=\"/Users/milmen/.rustup\" CARGO_HOME=\"/Users/milmen/.cargo\" RUSTUP_TOOLCHAIN=\"stable-aarch64-apple-darwin\" tauri dev",
+    "tauri:build": "PATH=\"/Users/milmen/.cargo/bin:/Users/milmen/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH\" RUSTUP_HOME=\"/Users/milmen/.rustup\" CARGO_HOME=\"/Users/milmen/.cargo\" RUSTUP_TOOLCHAIN=\"stable-aarch64-apple-darwin\" tauri build"
   },
   "license": "MIT",
   "dependencies": {

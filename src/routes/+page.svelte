@@ -57,8 +57,10 @@
     { route: 'sales', icon: '📋', label: 'Ventas' },
     { route: 'inventory', icon: '📦', label: 'Inventario', section: 'Gestión' },
     { route: 'customers', icon: '👥', label: 'Clientes' },
+    { route: 'suppliers', icon: '🏭', label: 'Proveedores' },
     { route: 'reports', icon: '📊', label: 'Reportes', section: 'Análisis' },
     { route: 'settings', icon: '⚙️', label: 'Configuración' },
+    { route: 'migration', icon: '🔄', label: 'Migración Datos', section: 'Herramientas' },
   ];
 
   // Filter nav items by role permissions
@@ -217,6 +219,10 @@
       {#await import('./customers/CustomersPage.svelte') then { default: CustomersPage }}
         <CustomersPage />
       {/await}
+    {:else if currentRoute === 'suppliers'}
+      {#await import('./suppliers/SuppliersPage.svelte') then { default: SuppliersPage }}
+        <SuppliersPage {currentUser} />
+      {/await}
     {:else if currentRoute === 'reports'}
       {#await import('./reports/ReportsPage.svelte') then { default: ReportsPage }}
         <ReportsPage {currentUser} />
@@ -224,6 +230,10 @@
     {:else if currentRoute === 'settings'}
       {#await import('./settings/SettingsPage.svelte') then { default: SettingsPage }}
         <SettingsPage {currentUser} />
+      {/await}
+    {:else if currentRoute === 'migration'}
+      {#await import('./migration/MigrationPage.svelte') then { default: MigrationPage }}
+        <MigrationPage />
       {/await}
     {/if}
   </main>

@@ -8,16 +8,32 @@ pub fn get_inventory(db: State<'_, Database>, low_stock_only: Option<bool>, expi
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
     let mut query = String::from(
-        "SELECT p.*, COALESCE(SUM(i.quantity), 0) as current_stock, c.name as category_name
+        "SELECT p.*,
+                COALESCE(inv.total_stock, 0) as current_stock,
+                c.name as category_name,
+                s.name as supplier_name,
+                inv.nearest_expiry,
+                CASE
+                    WHEN inv.nearest_expiry IS NULL THEN NULL
+                    WHEN inv.nearest_expiry < DATE('now', '-4 hours') THEN 'expired'
+                    WHEN inv.nearest_expiry <= DATE('now', '-4 hours', '+4 months') THEN 'expiring'
+                    ELSE 'active'
+                END as expiry_status
          FROM products p
-         LEFT JOIN inventory i ON i.product_id = p.id
+         LEFT JOIN (
+             SELECT product_id,
+                    SUM(quantity) as total_stock,
+                    MIN(CASE WHEN quantity > 0 AND expiry_date IS NOT NULL THEN expiry_date END) as nearest_expiry
+             FROM inventory
+             GROUP BY product_id
+         ) inv ON inv.product_id = p.id
          LEFT JOIN categories c ON c.id = p.category_id
-         WHERE p.is_active = 1
-         GROUP BY p.id"
+         LEFT JOIN suppliers s ON s.id = p.supplier_id
+         WHERE p.is_active = 1"
     );
 
     if low_stock_only.unwrap_or(false) {
-        query.push_str(" HAVING current_stock <= p.min_stock");
+        query.push_str(" AND COALESCE(inv.total_stock, 0) <= p.min_stock AND p.min_stock > 0");
     }
 
     query.push_str(" ORDER BY p.name ASC");
@@ -41,9 +57,14 @@ pub fn get_inventory(db: State<'_, Database>, low_stock_only: Option<bool>, expi
                 metadata: row.get(12)?,
                 created_at: row.get(13)?,
                 updated_at: row.get(14)?,
+                supplier_id: row.get(15)?,
+                dose: row.get(16)?,
             },
-            current_stock: row.get(15)?,
-            category_name: row.get(16)?,
+            current_stock: row.get(17)?,
+            category_name: row.get(18)?,
+            supplier_name: row.get(19)?,
+            nearest_expiry_date: row.get(20)?,
+            expiry_status: row.get(21)?,
         })
     }).map_err(|e| e.to_string())?;
 

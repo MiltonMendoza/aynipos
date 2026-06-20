@@ -7,6 +7,8 @@ const MIGRATION_V3: &str = include_str!("../../migrations/003_lot_movements.sql"
 const MIGRATION_V4: &str = include_str!("../../migrations/004_users.sql");
 const MIGRATION_V5: &str = include_str!("../../migrations/005_audit_log.sql");
 const MIGRATION_V6: &str = include_str!("../../migrations/006_timezone_bolivia.sql");
+const MIGRATION_V7: &str = include_str!("../../migrations/007_suppliers.sql");
+const MIGRATION_V8: &str = include_str!("../../migrations/008_product_dose.sql");
 
 pub fn run_migrations(conn: &Connection) -> Result<()> {
     // Create migrations tracking table
@@ -63,7 +65,19 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.execute("INSERT INTO _migrations (version) VALUES (6)", [])?;
     }
 
-    log::info!("Database at version {}", std::cmp::max(current_version, 6));
+    if current_version < 7 {
+        log::info!("Applying migration v7: suppliers module");
+        conn.execute_batch(MIGRATION_V7)?;
+        conn.execute("INSERT INTO _migrations (version) VALUES (7)", [])?;
+    }
+
+    if current_version < 8 {
+        log::info!("Applying migration v8: product dose field");
+        conn.execute_batch(MIGRATION_V8)?;
+        conn.execute("INSERT INTO _migrations (version) VALUES (8)", [])?;
+    }
+
+    log::info!("Database at version {}", std::cmp::max(current_version, 8));
     Ok(())
 }
 

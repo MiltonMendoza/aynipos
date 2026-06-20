@@ -19,6 +19,8 @@ pub struct Product {
     pub metadata: Option<String>,
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
+    pub supplier_id: Option<String>,
+    pub dose: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,6 +36,8 @@ pub struct CreateProduct {
     pub unit: Option<String>,
     pub min_stock: Option<i32>,
     pub metadata: Option<String>,
+    pub supplier_id: Option<String>,
+    pub dose: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,6 +55,8 @@ pub struct UpdateProduct {
     pub min_stock: Option<i32>,
     pub is_active: Option<bool>,
     pub metadata: Option<String>,
+    pub supplier_id: Option<String>,
+    pub dose: Option<String>,
 }
 
 // ─── Category ──────────────────────────────────────────
@@ -101,6 +107,7 @@ pub struct CreateCustomer {
 // ─── Inventory ─────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct InventoryItem {
     pub id: String,
     pub product_id: String,
@@ -182,6 +189,7 @@ pub struct CreateSale {
     pub payment_details: Option<String>,
     pub discount_amount: Option<f64>,
     pub notes: Option<String>,
+    pub user_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -242,6 +250,45 @@ pub struct DashboardStats {
     pub total_products: i64,
     pub low_stock_count: i64,
     pub expiring_soon_count: i64,
+    pub total_capital: f64,
+}
+
+// ─── Supplier ──────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Supplier {
+    pub id: String,
+    pub name: String,
+    pub contact_name: Option<String>,
+    pub phone: Option<String>,
+    pub email: Option<String>,
+    pub address: Option<String>,
+    pub notes: Option<String>,
+    pub is_active: bool,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateSupplier {
+    pub name: String,
+    pub contact_name: Option<String>,
+    pub phone: Option<String>,
+    pub email: Option<String>,
+    pub address: Option<String>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateSupplier {
+    pub id: String,
+    pub name: Option<String>,
+    pub contact_name: Option<String>,
+    pub phone: Option<String>,
+    pub email: Option<String>,
+    pub address: Option<String>,
+    pub notes: Option<String>,
+    pub is_active: Option<bool>,
 }
 
 // ─── Product with stock info ───────────────────────────
@@ -251,6 +298,9 @@ pub struct ProductWithStock {
     pub product: Product,
     pub current_stock: f64,
     pub category_name: Option<String>,
+    pub supplier_name: Option<String>,
+    pub nearest_expiry_date: Option<String>,
+    pub expiry_status: Option<String>, // "active" | "expiring" | "expired" | None (sin lotes)
 }
 
 // ─── Import/Export ─────────────────────────────────────
@@ -259,6 +309,7 @@ pub struct ProductWithStock {
 pub struct ImportResult {
     pub created: u32,
     pub updated: u32,
+    pub lots_created: u32, // lotes de vencimiento creados por fecha_vencimiento
     pub errors: Vec<ImportError>,
 }
 
@@ -311,6 +362,50 @@ pub struct InventoryReportItem {
     pub stock_sale_value: f64,
     pub last_movement_date: Option<String>,
     pub days_without_movement: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExpiryReportItem {
+    pub product_id: String,
+    pub product_name: String,
+    pub sku: String,
+    pub category_name: Option<String>,
+    pub supplier_name: Option<String>,
+    pub dose: Option<String>,
+    pub current_stock: f64,
+    pub sale_price: f64,
+    pub purchase_price: f64,
+    pub stock_sale_value: f64,
+    pub nearest_expiry_date: Option<String>,
+    pub expiry_status: String, // "active" | "expiring" | "expired"
+}
+
+// ─── Stock Report ─────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StockReportItem {
+    pub product_id: String,
+    pub product_name: String,
+    pub sku: String,
+    pub category_name: Option<String>,
+    pub current_stock: f64,
+    pub sale_price: f64,
+    pub stock_sale_value: f64,
+}
+
+// ─── Inventory Chart Data ─────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InventoryChartData {
+    // Estado de vencimiento
+    pub expired_count: i64,
+    pub expiring_count: i64,
+    pub active_count: i64,
+    // Distribución por stock
+    pub stock_zero: i64,
+    pub stock_1_5: i64,
+    pub stock_6_10: i64,
+    pub stock_gt_10: i64,
 }
 
 // ─── Users ─────────────────────────────────────────────

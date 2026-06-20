@@ -1,14 +1,30 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { ProductWithStock, Category, CreateProduct, UpdateProduct, ImportResult, InventoryLot, InventoryMovement, User } from '$lib/types';
-  import { getInventory, adjustInventory, getCategories, createProduct, createCategory, updateProduct, exportProductsCsv, importProductsCsv, getProductLots, deleteLot, getInventoryMovements, logAction } from '$lib/services/api';
+  import type { ProductWithStock, Category, CreateProduct, UpdateProduct, ImportResult, InventoryLot, InventoryMovement, User, Supplier } from '$lib/types';
+  import { getInventory, adjustInventory, getCategories, createProduct, createCategory, updateProduct, exportProductsCsv, importProductsCsv, getProductLots, deleteLot, getInventoryMovements, logAction, getSuppliers } from '$lib/services/api';
+  import { DataTableState } from '$lib/utils/datatable.svelte';
+  import TablePagination from '$lib/components/TablePagination.svelte';
 
   let { currentUser }: { currentUser: User | null } = $props();
   import { save, open } from '@tauri-apps/plugin-dialog';
 
   let inventory: ProductWithStock[] = $state([]);
   let categories: Category[] = $state([]);
+  let suppliers: Supplier[] = $state([]);
   let filter = $state<'all' | 'low' | 'expiring'>('all');
+
+  let table = new DataTableState<ProductWithStock>([], [
+    'product.sku',
+    'product.name',
+    'category_name',
+    'supplier_name'
+  ]);
+
+  $effect(() => {
+    table.currentPage;
+    openDropdownId = null;
+  });
+
   let showAddProduct = $state(false);
   let showAddCategory = $state(false);
   let showAdjust = $state(false);
@@ -58,6 +74,14 @@
   let movements: InventoryMovement[] = $state([]);
   let movementsLoading = $state(false);
 
+  // Dropdown de acciones por fila
+  let openDropdownId = $state<string | null>(null);
+
+  function toggleDropdown(e: MouseEvent, id: string) {
+    e.stopPropagation();
+    openDropdownId = openDropdownId === id ? null : id;
+  }
+
   onMount(loadInventory);
 
   async function loadInventory() {
@@ -69,8 +93,14 @@
       } else {
         inventory = await getInventory();
       }
+      table.data = inventory;
+      table.currentPage = 1;
       categories = await getCategories();
-    } catch { inventory = []; }
+      suppliers = await getSuppliers();
+    } catch {
+      inventory = [];
+      table.data = [];
+    }
   }
 
   function validateProduct(): boolean {
@@ -233,6 +263,8 @@
       tax_rate: ps.product.tax_rate,
       unit: ps.product.unit,
       min_stock: ps.product.min_stock,
+      supplier_id: ps.product.supplier_id ?? undefined,
+      dose: ps.product.dose ?? undefined,
     };
     editErrors = {};
     showEditProduct = true;
@@ -418,7 +450,10 @@
   }
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
+<svelte:window
+  onkeydown={handleKeydown}
+  onclick={() => { openDropdownId = null; }}
+/>
 
 <div class="page">
   <div class="page-header">
@@ -438,63 +473,151 @@
     </div>
   </div>
 
-  <!-- Filters -->
-  <div class="flex gap-md" style="margin-bottom: var(--space-xl);">
-    {#each [
-      { key: 'all' as const, label: 'Todos', icon: '📋' },
-      { key: 'low' as const, label: 'Bajo Stock', icon: '⚠️' },
-      { key: 'expiring' as const, label: 'Por Vencer', icon: '⏰' },
-    ] as f}
-      <button
-        class="btn"
-        class:btn-primary={filter === f.key}
-        class:btn-ghost={filter !== f.key}
-        onclick={() => filter = f.key}
-      >
-        {f.icon} {f.label}
-      </button>
-    {/each}
+  <!-- Filters and Search Bar -->
+  <div style="display: flex; justify-content: space-between; align-items: center; gap: var(--space-md); margin-bottom: var(--space-md); flex-wrap: wrap;">
+    <div class="flex gap-sm">
+      {#each [
+        { key: 'all' as const, label: 'Todos', icon: '📋' },
+        { key: 'low' as const, label: 'Bajo Stock', icon: '⚠️' },
+        { key: 'expiring' as const, label: 'Por Vencer', icon: '⏰' },
+      ] as f}
+        <button
+          class="btn btn-sm"
+          class:btn-primary={filter === f.key}
+          class:btn-ghost={filter !== f.key}
+          onclick={() => filter = f.key}
+        >
+          {f.icon} {f.label}
+        </button>
+      {/each}
+    </div>
+
+    <!-- Search box -->
+    <div style="position: relative; width: 320px;">
+      <input
+        class="input input-compact"
+        style="padding-right: 30px !important;"
+        placeholder="🔍 Buscar por nombre, SKU, categoría o proveedor..."
+        bind:value={table.search}
+        oninput={() => { table.currentPage = 1; openDropdownId = null; }}
+      />
+      {#if table.search}
+        <button
+          onclick={() => { table.search = ''; table.currentPage = 1; openDropdownId = null; }}
+          style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 4px;"
+        >
+          ✕
+        </button>
+      {/if}
+    </div>
   </div>
 
   <!-- Inventory table -->
   <div class="table-container">
+    <!-- Leyenda de vencimiento -->
+    <div class="expiry-legend" style="margin-bottom: var(--space-md);">
+      <span style="font-weight: 600;">Vencimiento:</span>
+      <div class="expiry-legend-item">
+        <span class="expiry-legend-dot expired"></span>
+        <span>Expirado</span>
+      </div>
+      <div class="expiry-legend-item">
+        <span class="expiry-legend-dot expiring"></span>
+        <span>Por vencer (≤ 4 meses)</span>
+      </div>
+      <div class="expiry-legend-item">
+        <span class="expiry-legend-dot active"></span>
+        <span>Vigente</span>
+      </div>
+    </div>
     <table>
       <thead>
         <tr>
-          <th>SKU</th>
-          <th>Producto</th>
-          <th>Categoría</th>
-          <th>Precio Compra</th>
-          <th>Precio Venta</th>
-          <th>Stock</th>
-          <th>Estado</th>
-          <th>Acciones</th>
+          <th style="width: 48px;"></th>
+          <th onclick={() => table.sortBy('product.sku')} style="cursor: pointer; user-select: none;">
+            SKU {table.sortColumn === 'product.sku' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+          </th>
+          <th onclick={() => table.sortBy('product.name')} style="cursor: pointer; user-select: none;">
+            Producto {table.sortColumn === 'product.name' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+          </th>
+          <th onclick={() => table.sortBy('category_name')} style="cursor: pointer; user-select: none;">
+            Categoría {table.sortColumn === 'category_name' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+          </th>
+          <th onclick={() => table.sortBy('product.dose')} style="cursor: pointer; user-select: none;">
+            Dosis {table.sortColumn === 'product.dose' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+          </th>
+          <th onclick={() => table.sortBy('supplier_name')} style="cursor: pointer; user-select: none;">
+            Proveedor {table.sortColumn === 'supplier_name' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+          </th>
+          <th onclick={() => table.sortBy('product.purchase_price')} style="cursor: pointer; user-select: none;">
+            P. Compra {table.sortColumn === 'product.purchase_price' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+          </th>
+          <th onclick={() => table.sortBy('product.sale_price')} style="cursor: pointer; user-select: none;">
+            P. Venta {table.sortColumn === 'product.sale_price' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+          </th>
+          <th onclick={() => table.sortBy('current_stock')} style="cursor: pointer; user-select: none;">
+            Stock {table.sortColumn === 'current_stock' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+          </th>
+          <th onclick={() => table.sortBy('nearest_expiry_date')} style="cursor: pointer; user-select: none;">
+            Vencimiento {table.sortColumn === 'nearest_expiry_date' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+          </th>
         </tr>
       </thead>
       <tbody>
-        {#if inventory.length === 0}
-          <tr><td colspan="8" class="text-center text-muted" style="padding: var(--space-3xl);">Sin productos</td></tr>
+        {#if table.paginated.length === 0}
+          <tr><td colspan="10" class="text-center text-muted" style="padding: var(--space-3xl);">Sin productos</td></tr>
         {:else}
-          {#each inventory as ps}
-            <tr>
+          {#each table.paginated as ps}
+            <tr
+              class:row-expired={ps.expiry_status === 'expired'}
+              class:row-low-stock={ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0}
+              class:row-expiring={ps.expiry_status === 'expiring' && !(ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0)}
+            >
+              <!-- Acciones como dropdown al inicio -->
+              <td style="position: relative;">
+                <div class="action-dropdown">
+                  <button
+                    class="btn btn-ghost btn-sm action-trigger"
+                    style="padding: 4px 8px; font-size: var(--font-size-base);"
+                    onclick={(e) => toggleDropdown(e, ps.product.id)}
+                  >⋮</button>
+                  {#if openDropdownId === ps.product.id}
+                  <div class="action-menu" role="menu">
+                    <button class="action-item" onclick={() => { openDropdownId = null; openEditProduct(ps); }}>✏️ Editar</button>
+                    <button class="action-item" onclick={() => { openDropdownId = null; openLots(ps); }}>📦 Lotes</button>
+                    <button class="action-item" onclick={() => { openDropdownId = null; openAdjust(ps); }}>📊 Ajustar stock</button>
+                    <button class="action-item" onclick={() => { openDropdownId = null; openMovements(ps); }}>📜 Historial</button>
+                  </div>
+                  {/if}
+                </div>
+              </td>
               <td class="font-mono text-sm">{ps.product.sku}</td>
               <td style="font-weight: 600;">{ps.product.name}</td>
               <td class="text-muted">{ps.category_name || '—'}</td>
+              <td class="text-muted">
+                {#if ps.product.dose}
+                  <span class="badge badge-info" style="font-size: var(--font-size-xs);">{ps.product.dose}</span>
+                {:else}—{/if}
+              </td>
+              <td class="text-muted">{ps.supplier_name || '—'}</td>
               <td>{formatCurrency(ps.product.purchase_price)}</td>
               <td style="font-weight: 600; color: var(--accent-primary);">{formatCurrency(ps.product.sale_price)}</td>
-              <td style="font-weight: 700;">{ps.current_stock}</td>
-              <td>
-                {#if ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0}
-                  <span class="badge badge-danger">Bajo</span>
-                {:else}
-                  <span class="badge badge-success">OK</span>
+              <!-- Stock horizontal: STOCK (Min: MIN) -->
+              <td style="font-weight: 700;">
+                {ps.current_stock}
+                {#if ps.product.min_stock > 0}
+                  <span style="font-weight: 400; font-size: var(--font-size-xs); color: var(--text-muted); margin-left: 2px;">
+                    (Min: {ps.product.min_stock})
+                  </span>
                 {/if}
               </td>
-              <td>
-                <button class="btn btn-ghost btn-sm" onclick={() => openEditProduct(ps)}>✏️ Editar</button>
-                <button class="btn btn-ghost btn-sm" onclick={() => openLots(ps)}>📦 Lotes</button>
-                <button class="btn btn-ghost btn-sm" onclick={() => openAdjust(ps)}>📊 Ajustar</button>
-                <button class="btn btn-ghost btn-sm" onclick={() => openMovements(ps)}>📜 Historial</button>
+              <!-- Vencimiento: solo fecha compacta -->
+              <td style="font-weight: 500;">
+                {#if ps.nearest_expiry_date}
+                  {new Date(ps.nearest_expiry_date + 'T12:00:00').toLocaleDateString('es-BO', { day: '2-digit', month: 'short', year: 'numeric' })}
+                {:else}
+                  —
+                {/if}
               </td>
             </tr>
           {/each}
@@ -502,6 +625,7 @@
       </tbody>
     </table>
   </div>
+  <TablePagination {table} />
 </div>
 
 <!-- Add Product Modal -->
@@ -597,6 +721,27 @@
             <label class="input-label">Stock mínimo</label>
             <input class="input" type="number" bind:value={newProduct.min_stock} min="0" />
           </div>
+        </div>
+        <!-- Dosis (farmacéutico) -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg);">
+          <div class="input-group">
+            <label class="input-label">Dosis</label>
+            <input class="input" bind:value={newProduct.dose} placeholder="ej: 500mg, 10ml, 250mg/5ml" />
+          </div>
+          <div class="input-group">
+            <label class="input-label">Proveedor</label>
+            <select class="select" bind:value={newProduct.supplier_id}>
+              <option value={undefined}>Sin proveedor</option>
+              {#each suppliers as s}
+                <option value={s.id}>{s.name}</option>
+              {/each}
+            </select>
+          </div>
+        </div>
+        <!-- Descripción -->
+        <div class="input-group">
+          <label class="input-label">Descripción</label>
+          <textarea class="input" bind:value={newProduct.description} placeholder="Descripción del producto..." rows="2" style="resize: vertical;"></textarea>
         </div>
       </div>
       <div class="modal-footer">
@@ -704,9 +849,25 @@
             <input class="input" type="number" bind:value={editProduct.min_stock} min="0" />
           </div>
         </div>
+        <!-- Dosis (farmacéutico) -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg);">
+          <div class="input-group">
+            <label class="input-label">Dosis</label>
+            <input class="input" bind:value={editProduct.dose} placeholder="ej: 500mg, 10ml, 250mg/5ml" />
+          </div>
+          <div class="input-group">
+            <label class="input-label">Proveedor</label>
+            <select class="select" bind:value={editProduct.supplier_id}>
+              <option value={undefined}>Sin proveedor</option>
+              {#each suppliers as s}
+                <option value={s.id}>{s.name}</option>
+              {/each}
+            </select>
+          </div>
+        </div>
         <div class="input-group">
           <label class="input-label">Descripción</label>
-          <textarea class="input" bind:value={editProduct.description} placeholder="Descripción del producto..." rows="3" style="resize: vertical;"></textarea>
+          <textarea class="input" bind:value={editProduct.description} placeholder="Descripción del producto..." rows="2" style="resize: vertical;"></textarea>
         </div>
       </div>
       <div class="modal-footer">
@@ -939,7 +1100,7 @@
         <button class="btn btn-ghost btn-sm" onclick={() => showImportResult = false}>✕</button>
       </div>
       <div class="modal-body">
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-lg); margin-bottom: var(--space-xl);">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr {importResult.lots_created > 0 ? '1fr' : ''}; gap: var(--space-lg); margin-bottom: var(--space-xl);">
           <div class="stat-card" style="text-align: center;">
             <div style="font-size: var(--font-size-2xl); font-weight: 700; color: var(--accent-success);">{importResult.created}</div>
             <div class="text-sm text-muted">✅ Creados</div>
@@ -948,6 +1109,12 @@
             <div style="font-size: var(--font-size-2xl); font-weight: 700; color: var(--accent-primary);">{importResult.updated}</div>
             <div class="text-sm text-muted">🔄 Actualizados</div>
           </div>
+          {#if importResult.lots_created > 0}
+          <div class="stat-card" style="text-align: center;">
+            <div style="font-size: var(--font-size-2xl); font-weight: 700; color: var(--accent-warning, #f59e0b);">{importResult.lots_created}</div>
+            <div class="text-sm text-muted">📅 Lotes de vencimiento creados</div>
+          </div>
+          {/if}
           <div class="stat-card" style="text-align: center;">
             <div style="font-size: var(--font-size-2xl); font-weight: 700; color: var(--accent-danger);">{importResult.errors.length}</div>
             <div class="text-sm text-muted">❌ Errores</div>
@@ -981,3 +1148,7 @@
     </div>
   </div>
 {/if}
+
+
+
+

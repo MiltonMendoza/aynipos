@@ -2,22 +2,46 @@
   import { onMount } from 'svelte';
   import type { Customer, CreateCustomer } from '$lib/types';
   import { getCustomers, createCustomer, updateCustomer, deleteCustomer } from '$lib/services/api';
+  import { DataTableState } from '$lib/utils/datatable.svelte';
+  import TablePagination from '$lib/components/TablePagination.svelte';
 
   let customers: Customer[] = $state([]);
-  let search = $state('');
   let showModal = $state(false);
   let editing: Customer | null = $state(null);
   let form: CreateCustomer = $state({ name: '' });
   let errors: Record<string, string> = $state({});
 
-  onMount(loadCustomers);
+  let table = new DataTableState<Customer>([], [
+    'name',
+    'nit',
+    'phone',
+    'email'
+  ]);
 
-  $effect(() => { loadCustomers(); });
+  let openDropdownId = $state<string | null>(null);
+
+  function toggleDropdown(e: MouseEvent, id: string) {
+    e.stopPropagation();
+    openDropdownId = openDropdownId === id ? null : id;
+  }
+
+  $effect(() => {
+    table.currentPage;
+    table.search;
+    openDropdownId = null;
+  });
+
+  onMount(loadCustomers);
 
   async function loadCustomers() {
     try {
-      customers = await getCustomers(search || undefined);
-    } catch { customers = []; }
+      customers = await getCustomers();
+      table.data = customers;
+      table.currentPage = 1;
+    } catch {
+      customers = [];
+      table.data = [];
+    }
   }
 
   function validate(): boolean {
@@ -80,7 +104,7 @@
   }
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
+<svelte:window onkeydown={handleKeydown} onclick={() => { openDropdownId = null; }} />
 
 <div class="page">
   <div class="page-header">
@@ -91,43 +115,76 @@
     <button class="btn btn-primary" onclick={openNew}>➕ Nuevo Cliente</button>
   </div>
 
-  <div style="margin-bottom: var(--space-xl);">
-    <input class="input" placeholder="🔍 Buscar por nombre, NIT o teléfono..." bind:value={search} />
+  <div style="margin-bottom: var(--space-md); position: relative; max-width: 320px;">
+    <input
+      class="input input-compact"
+      style="padding-right: 30px !important;"
+      placeholder="🔍 Buscar por nombre, NIT o teléfono..."
+      bind:value={table.search}
+      oninput={() => table.currentPage = 1}
+    />
+    {#if table.search}
+      <button
+        onclick={() => { table.search = ''; table.currentPage = 1; }}
+        style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 4px;"
+      >
+        ✕
+      </button>
+    {/if}
   </div>
 
   <div class="table-container">
     <table>
       <thead>
         <tr>
-          <th>Nombre</th>
-          <th>NIT</th>
-          <th>Teléfono</th>
-          <th>Email</th>
-          <th>Acciones</th>
+          <th style="width: 48px;"></th>
+          <th onclick={() => table.sortBy('name')} style="cursor: pointer; user-select: none;">
+            Nombre {table.sortColumn === 'name' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+          </th>
+          <th onclick={() => table.sortBy('nit')} style="cursor: pointer; user-select: none;">
+            NIT {table.sortColumn === 'nit' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+          </th>
+          <th onclick={() => table.sortBy('phone')} style="cursor: pointer; user-select: none;">
+            Teléfono {table.sortColumn === 'phone' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+          </th>
+          <th onclick={() => table.sortBy('email')} style="cursor: pointer; user-select: none;">
+            Email {table.sortColumn === 'email' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+          </th>
         </tr>
       </thead>
       <tbody>
-        {#if customers.length === 0}
+        {#if table.paginated.length === 0}
           <tr><td colspan="5" class="text-center text-muted" style="padding: var(--space-3xl);">No hay clientes registrados</td></tr>
         {:else}
-          {#each customers as c}
+          {#each table.paginated as c}
             <tr>
+              <!-- Acciones como dropdown al inicio -->
+              <td style="position: relative;">
+                <div class="action-dropdown">
+                  <button
+                    class="btn btn-ghost btn-sm action-trigger"
+                    style="padding: 4px 8px; font-size: var(--font-size-base);"
+                    onclick={(e) => toggleDropdown(e, c.id)}
+                  >⋮</button>
+                  {#if openDropdownId === c.id}
+                  <div class="action-menu" role="menu">
+                    <button class="action-item" onclick={() => { openDropdownId = null; openEdit(c); }}>✏️ Editar</button>
+                    <button class="action-item" onclick={() => { openDropdownId = null; handleDelete(c.id); }}>🗑️ Eliminar</button>
+                  </div>
+                  {/if}
+                </div>
+              </td>
               <td style="font-weight: 600;">{c.name}</td>
               <td class="font-mono">{c.nit || '—'}</td>
               <td>{c.phone || '—'}</td>
               <td class="text-muted">{c.email || '—'}</td>
-              <td>
-                <div class="flex gap-sm">
-                  <button class="btn btn-ghost btn-sm" onclick={() => openEdit(c)}>✏️</button>
-                  <button class="btn btn-ghost btn-sm" onclick={() => handleDelete(c.id)}>🗑️</button>
-                </div>
-              </td>
             </tr>
           {/each}
         {/if}
       </tbody>
     </table>
   </div>
+  <TablePagination {table} />
 </div>
 
 {#if showModal}

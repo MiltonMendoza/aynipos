@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getDashboardStats, getSales, getTopSellingProducts, getSalesChartData, getProfitMarginReport, getInventoryReport, saveReportCsv, saveReportHtml, getCashRegisterHistory, getCashRegisterReport, getUsers, getSettings } from '$lib/services/api';
-  import type { DashboardStats, Sale, TopSellingProduct, SalesChartDataPoint, ProfitMarginProduct, InventoryReportItem, User, CashRegisterReport } from '$lib/types';
+  import { getDashboardStats, getSales, getTopSellingProducts, getSalesChartData, getProfitMarginReport, getInventoryReport, getExpiryReport, saveReportCsv, saveReportHtml, getCashRegisterHistory, getCashRegisterReport, getUsers, getSettings, getStockReport, getExpiryRangeReport, getInventoryChartData } from '$lib/services/api';
+  import type { DashboardStats, Sale, TopSellingProduct, SalesChartDataPoint, ProfitMarginProduct, InventoryReportItem, ExpiryReportItem, StockReportItem, InventoryChartData, User, CashRegisterReport } from '$lib/types';
   import { extractBusinessInfo, type BusinessInfo } from '$lib/services/receipt';
   import { printCashReport } from '$lib/services/cashReportPrint';
   import { save } from '@tauri-apps/plugin-dialog';
@@ -12,7 +12,7 @@
 
   let stats: DashboardStats = $state({
     total_sales_today: 0, total_transactions_today: 0, total_products: 0,
-    low_stock_count: 0, expiring_soon_count: 0
+    low_stock_count: 0, expiring_soon_count: 0, total_capital: 0
   });
   let recentSales: Sale[] = $state([]);
 
@@ -60,12 +60,65 @@
   let cashHistoryLimit = $state(20);
   let cashUsers: User[] = $state([]);
 
+  // ─── Expiry Report ────────────────────────────
+  let expiryItems: ExpiryReportItem[] = $state([]);
+  let expiryLoading = $state(false);
+  let expiryTab: 'all' | 'active' | 'expiring' | 'expired' = $state('all');
+  let expirySearch = $state('');
+
   async function loadCashHistory() {
     cashHistoryLoading = true;
     try {
       cashHistory = await getCashRegisterHistory(cashFilterUser || undefined, cashHistoryLimit);
     } catch { cashHistory = []; }
     cashHistoryLoading = false;
+  }
+
+  async function loadExpiryReport() {
+    expiryLoading = true;
+    try {
+      const status = expiryTab === 'all' ? undefined : expiryTab;
+      expiryItems = await getExpiryReport(status, expirySearch || undefined);
+    } catch { expiryItems = []; }
+    expiryLoading = false;
+  }
+
+  $effect(() => { expiryTab; expirySearch; loadExpiryReport(); });
+
+  function expiryStatusLabel(s: string): string {
+    if (s === 'expired') return '🔴 Expirado';
+    if (s === 'expiring') return '⚠️ Por Expirar';
+    return '✅ Vigente';
+  }
+
+  function expiryBadgeClass(s: string): string {
+    if (s === 'expired') return 'badge-danger';
+    if (s === 'expiring') return 'badge-warning';
+    return 'badge-success';
+  }
+
+  function formatExpiryDate(d: string | null): string {
+    if (!d) return '—';
+    return new Date(d + 'T00:00:00').toLocaleDateString('es-BO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  }
+
+  function expiryCountByStatus(status: string): number {
+    return expiryItems.filter(i => i.expiry_status === status).length;
+  }
+
+  async function exportExpiryCsv() {
+    if (expiryItems.length === 0) return;
+    exporting = true;
+    try {
+      const label = expiryTab === 'all' ? 'todos' : expiryTab;
+      const rows = ['Producto,SKU,Categoría,Dosis,Proveedor,Stock,Precio Venta,Capital,Próx. Vencimiento,Estado'];
+      for (const p of expiryItems) {
+        rows.push(`"${p.product_name}","${p.sku}","${p.category_name || ''}","${p.dose || ''}","${p.supplier_name || ''}",${p.current_stock.toFixed(0)},${p.sale_price.toFixed(2)},${p.stock_sale_value.toFixed(2)},"${p.nearest_expiry_date || 'Sin fecha'}","${expiryStatusLabel(p.expiry_status)}"`);
+      }
+      rows.push(`"TOTAL",,,,,,,${ expiryItems.reduce((s, p) => s + p.stock_sale_value, 0).toFixed(2)},""`);
+      await doExportCsv(`vencimientos_${label}_${todayStr()}.csv`, rows.join('\n'));
+    } catch { /* ignore cancel */ }
+    exporting = false;
   }
 
   async function handleViewCashReport(registerId: string) {
@@ -353,6 +406,7 @@
       recentSales = (await getSales()).slice(0, 10);
       cashUsers = await getUsers();
       await loadCashHistory();
+      loadInventoryChartData();
     } catch {}
   });
 
@@ -596,6 +650,96 @@
     } catch { /* ignore */ }
     exporting = false;
   }
+
+  // ─── Feature D: Reporte por Stock Exacto ────────────────────────────────
+
+  let stockItems: StockReportItem[] = $state([]);
+  let stockLoading = $state(false);
+  let stockExactFilter: number | undefined = $state(undefined);
+
+  async function loadStockReport() {
+    stockLoading = true;
+    try {
+      stockItems = await getStockReport(stockExactFilter);
+    } catch { stockItems = []; }
+    stockLoading = false;
+  }
+
+  $effect(() => { stockExactFilter; loadStockReport(); });
+
+  let stockTotalCapital = $derived(stockItems.reduce((s, p) => s + p.stock_sale_value, 0));
+
+  // ─── Feature E: Reporte por Rango de Vencimiento ────────────────────────
+  let rangeItems: ExpiryReportItem[] = $state([]);
+  let rangeLoading = $state(false);
+  let rangeFrom = $state('');
+  let rangeTo = $state('');
+  let rangeSearch = $state('');
+
+  async function loadRangeReport() {
+    rangeLoading = true;
+    try {
+      rangeItems = await getExpiryRangeReport(rangeFrom || undefined, rangeTo || undefined, rangeSearch || undefined);
+    } catch { rangeItems = []; }
+    rangeLoading = false;
+  }
+
+  let rangeTotalCapital = $derived(rangeItems.reduce((s, p) => s + p.stock_sale_value, 0));
+
+  async function exportRangeCsv() {
+    if (rangeItems.length === 0) return;
+    exporting = true;
+    try {
+      const rows = ['Producto,SKU,Categoría,Dosis,Proveedor,Stock,Precio Venta,Capital,Vence'];
+      for (const p of rangeItems) {
+        rows.push(`"${p.product_name}","${p.sku}","${p.category_name || ''}","${p.dose || ''}","${p.supplier_name || ''}",${p.current_stock.toFixed(0)},${p.sale_price.toFixed(2)},${p.stock_sale_value.toFixed(2)},"${p.nearest_expiry_date || 'Sin fecha'}"`);
+      }
+      rows.push(`"TOTAL",,,,,,,${rangeTotalCapital.toFixed(2)},`);
+      await doExportCsv(`vencimientos_rango_${todayStr()}.csv`, rows.join('\n'));
+    } catch { /* ignore cancel */ }
+    exporting = false;
+  }
+
+  // ─── Feature F: Pie Charts de Inventario ────────────────────────────────
+  let inventoryChartData: InventoryChartData | null = $state(null);
+  let chartDataLoading = $state(false);
+
+  async function loadInventoryChartData() {
+    chartDataLoading = true;
+    try {
+      inventoryChartData = await getInventoryChartData();
+    } catch { inventoryChartData = null; }
+    chartDataLoading = false;
+  }
+
+  // Pie chart rendering helper (returns SVG path data for a slice)
+  function pieSlice(cx: number, cy: number, r: number, startAngle: number, endAngle: number): string {
+    if (endAngle - startAngle >= 2 * Math.PI - 0.001) {
+      return `M ${cx} ${cy - r} A ${r} ${r} 0 1 1 ${cx - 0.001} ${cy - r} Z`;
+    }
+    const x1 = cx + r * Math.sin(startAngle);
+    const y1 = cy - r * Math.cos(startAngle);
+    const x2 = cx + r * Math.sin(endAngle);
+    const y2 = cy - r * Math.cos(endAngle);
+    const large = endAngle - startAngle > Math.PI ? 1 : 0;
+    return `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`;
+  }
+
+  function buildPie(values: number[]): { path: string; color: string }[] {
+    const total = values.reduce((s, v) => s + v, 0);
+    if (total === 0) return [];
+    const colors = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#f97316'];
+    let angle = 0;
+    return values.map((v, i) => {
+      const start = angle;
+      const end = angle + (v / total) * 2 * Math.PI;
+      angle = end;
+      return { path: pieSlice(90, 90, 70, start, end), color: colors[i % colors.length] };
+    });
+  }
+
+  // activeSection: controla las secciones de inventario
+  let activeSection = $state('dashboard'); // 'dashboard' | 'vencimientos' | 'stock' | 'rango'
 </script>
 
 <div class="page">
@@ -606,11 +750,18 @@
     </div>
   </div>
 
-  <div class="card-grid card-grid-4" style="margin-bottom: var(--space-2xl);">
+  <div class="card-grid" style="grid-template-columns: repeat(5, 1fr); margin-bottom: var(--space-2xl);">
     <div class="stat-card"><div class="stat-icon green">💰</div><div class="stat-content"><div class="stat-value">{fmt(stats.total_sales_today)}</div><div class="stat-label">Ventas hoy</div></div></div>
     <div class="stat-card"><div class="stat-icon blue">🧾</div><div class="stat-content"><div class="stat-value">{stats.total_transactions_today}</div><div class="stat-label">Transacciones</div></div></div>
     <div class="stat-card"><div class="stat-icon yellow">⚠️</div><div class="stat-content"><div class="stat-value">{stats.low_stock_count}</div><div class="stat-label">Bajo stock</div></div></div>
     <div class="stat-card"><div class="stat-icon red">⏰</div><div class="stat-content"><div class="stat-value">{stats.expiring_soon_count}</div><div class="stat-label">Por vencer</div></div></div>
+    <div class="stat-card" style="border-color: color-mix(in srgb, var(--accent-success) 35%, transparent);">
+      <div class="stat-icon green">🏦</div>
+      <div class="stat-content">
+        <div class="stat-value" style="color: var(--accent-success); font-size: 1.1rem;">{fmt(stats.total_capital)}</div>
+        <div class="stat-label">Capital en inventario</div>
+      </div>
+    </div>
   </div>
 
   <!-- ─── Sales Chart ──────────────────────────────────── -->
@@ -1216,6 +1367,385 @@
     </div>
   </div>
   {/if}
+
+  <!-- ─── Expiry Report ───────────────────────────── -->
+  {#if hasPermission(currentUser, 'view_reports_inventory')}
+  <div class="card" style="margin-bottom: var(--space-2xl);">
+    <div class="top-header">
+      <h3 style="font-weight: 700;">📅 Reporte de Vencimientos</h3>
+      <div class="top-controls">
+        {#if expiryItems.length > 0}
+          <div class="export-btns">
+            <button class="btn btn-sm btn-ghost" onclick={exportExpiryCsv} disabled={exporting} title="Exportar a CSV">📥 CSV</button>
+          </div>
+        {/if}
+      </div>
+    </div>
+
+    <!-- Sub-tabs -->
+    <div class="flex gap-sm" style="margin-bottom: var(--space-lg);">  
+      {#each [
+        { key: 'all' as const,      label: 'Todos',           count: expiryItems.length },
+        { key: 'active' as const,   label: '✅ Vigentes',       count: expiryCountByStatus('active') },
+        { key: 'expiring' as const, label: '⚠️ Por Expirar',   count: expiryCountByStatus('expiring') },
+        { key: 'expired' as const,  label: '🔴 Expirados',       count: expiryCountByStatus('expired') },
+      ] as tab}
+        <button
+          class="btn btn-sm {expiryTab === tab.key ? 'btn-primary' : 'btn-ghost'}"
+          onclick={() => expiryTab = tab.key}
+        >{tab.label}
+          {#if tab.key !== 'all'}<span style="opacity:0.7; font-size:0.75em; margin-left:3px;">{tab.count}</span>{/if}
+        </button>
+      {/each}
+    </div>
+
+    <!-- Summary cards -->
+    <div class="card-grid card-grid-4" style="margin-bottom: var(--space-lg);">
+      <div class="stat-card"><div class="stat-icon green">✅</div><div class="stat-content"><div class="stat-value">{expiryCountByStatus('active')}</div><div class="stat-label">Vigentes</div></div></div>
+      <div class="stat-card"><div class="stat-icon yellow">⚠️</div><div class="stat-content"><div class="stat-value">{expiryCountByStatus('expiring')}</div><div class="stat-label">Por Expirar (≤4m)</div></div></div>
+      <div class="stat-card"><div class="stat-icon red">🔴</div><div class="stat-content"><div class="stat-value">{expiryCountByStatus('expired')}</div><div class="stat-label">Expirados</div></div></div>
+      <div class="stat-card"><div class="stat-icon blue">💰</div><div class="stat-content"><div class="stat-value">Bs {expiryItems.reduce((s,p)=>s+p.stock_sale_value,0).toFixed(0)}</div><div class="stat-label">Capital (Bs)</div></div></div>
+    </div>
+
+    <!-- Search -->
+    <input class="input" style="margin-bottom: var(--space-md);" placeholder="🔍 Buscar producto o SKU..." bind:value={expirySearch} />
+
+    <!-- Table -->
+    {#if expiryLoading}
+      <div class="top-empty"><span class="text-muted">Cargando...</span></div>
+    {:else if expiryItems.length === 0}
+      <div class="top-empty">
+        <span style="font-size: 2rem;">📅</span>
+        <span class="text-muted">No hay productos con datos de vencimiento en esta categoría</span>
+      </div>
+    {:else}
+      <div class="table-container">
+        <table>
+          <thead><tr>
+            <th>Producto</th>
+            <th>SKU</th>
+            <th>Categoría</th>
+            <th>Dosis</th>
+            <th>Proveedor</th>
+            <th class="text-right">Stock</th>
+            <th class="text-right">P. Venta</th>
+            <th class="text-right">Capital</th>
+            <th>Próx. Vencimiento</th>
+            <th>Estado</th>
+          </tr></thead>
+          <tbody>
+            {#each expiryItems as p}
+              <tr>
+                <td style="font-weight: 600;">{p.product_name}</td>
+                <td class="font-mono text-sm text-muted">{p.sku}</td>
+                <td class="text-muted">{p.category_name || '—'}</td>
+                <td>
+                  {#if p.dose}<span class="badge badge-info" style="font-size:0.7em;">{p.dose}</span>{:else}—{/if}
+                </td>
+                <td class="text-muted">{p.supplier_name || '—'}</td>
+                <td class="text-right">{p.current_stock.toFixed(0)}</td>
+                <td class="text-right">Bs {p.sale_price.toFixed(2)}</td>
+                <td class="text-right" style="font-weight:600;">Bs {p.stock_sale_value.toFixed(2)}</td>
+                <td>
+                  {#if p.nearest_expiry_date}
+                    <span style="font-size: var(--font-size-sm);">{formatExpiryDate(p.nearest_expiry_date)}</span>
+                  {:else}
+                    <span class="text-muted">— Sin fecha</span>
+                  {/if}
+                </td>
+                <td><span class="badge {expiryBadgeClass(p.expiry_status)}">{expiryStatusLabel(p.expiry_status)}</span></td>
+              </tr>
+            {/each}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="5" style="font-weight:700;">TOTAL ({expiryItems.length} productos)</td>
+              <td class="text-right" style="font-weight:700;">{expiryItems.reduce((s,p)=>s+p.current_stock,0).toFixed(0)}</td>
+              <td></td>
+              <td class="text-right" style="font-weight:700;">Bs {expiryItems.reduce((s,p)=>s+p.stock_sale_value,0).toFixed(2)}</td>
+              <td colspan="2"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    {/if}
+  </div>
+  {/if}
+
+  <!-- ─── Feature F: Pie Charts de Inventario ─────────────────────────── -->
+  {#if hasPermission(currentUser, 'view_reports_inventory')}
+  <div class="card" style="margin-bottom: var(--space-2xl);">
+    <div class="top-header">
+      <h3 style="font-weight: 700;">🍕 Distribución de Inventario</h3>
+      <button class="btn btn-ghost btn-sm" onclick={loadInventoryChartData} disabled={chartDataLoading}>
+        {chartDataLoading ? 'Actualizando...' : '🔄 Actualizar'}
+      </button>
+    </div>
+
+    {#if chartDataLoading}
+      <div class="top-empty"><span class="text-muted">Cargando gráficos...</span></div>
+    {:else if inventoryChartData}
+      {@const expiryPie = buildPie([
+        inventoryChartData.expired_count,
+        inventoryChartData.expiring_count,
+        inventoryChartData.active_count,
+      ])}
+      {@const expiryLabels = [
+        { label: '🔴 Expirados', color: '#ef4444', count: inventoryChartData.expired_count },
+        { label: '⚠️ Por Vencer', color: '#f59e0b', count: inventoryChartData.expiring_count },
+        { label: '✅ Vigentes', color: '#10b981', count: inventoryChartData.active_count },
+      ]}
+      {@const stockPie = buildPie([
+        inventoryChartData.stock_zero,
+        inventoryChartData.stock_1_5,
+        inventoryChartData.stock_6_10,
+        inventoryChartData.stock_gt_10,
+      ])}
+      {@const stockLabels = [
+        { label: 'Sin stock (0)', color: '#ef4444', count: inventoryChartData.stock_zero },
+        { label: 'Stock bajo (1–5)', color: '#f59e0b', count: inventoryChartData.stock_1_5 },
+        { label: 'Stock medio (6–10)', color: '#3b82f6', count: inventoryChartData.stock_6_10 },
+        { label: 'Stock alto (>10)', color: '#10b981', count: inventoryChartData.stock_gt_10 },
+      ]}
+      <div class="charts-grid">
+        <!-- Pie 1: Estado de vencimiento -->
+        <div>
+          <p class="text-muted text-sm" style="margin-bottom: var(--space-md); font-weight: 600;">Estado de Vencimiento</p>
+          <div class="pie-chart-container">
+            <svg width="180" height="180" viewBox="0 0 180 180">
+              {#each expiryPie as slice}
+                <path class="pie-segment" d={slice.path} fill={slice.color} />
+              {/each}
+              {#if expiryPie.length === 0}
+                <circle cx="90" cy="90" r="70" fill="var(--bg-tertiary)" />
+                <text x="90" y="95" text-anchor="middle" fill="var(--text-muted)" font-size="12">Sin datos</text>
+              {/if}
+            </svg>
+            <div class="pie-chart-legend">
+              {#each expiryLabels as item}
+                <div class="pie-legend-item">
+                  <span class="pie-legend-dot" style="background: {item.color};"></span>
+                  <span class="pie-legend-label">{item.label}</span>
+                  <span class="pie-legend-count">{item.count}</span>
+                </div>
+              {/each}
+            </div>
+          </div>
+        </div>
+
+        <!-- Pie 2: Distribución por stock -->
+        <div>
+          <p class="text-muted text-sm" style="margin-bottom: var(--space-md); font-weight: 600;">Distribución por Stock</p>
+          <div class="pie-chart-container">
+            <svg width="180" height="180" viewBox="0 0 180 180">
+              {#each stockPie as slice}
+                <path class="pie-segment" d={slice.path} fill={slice.color} />
+              {/each}
+              {#if stockPie.length === 0}
+                <circle cx="90" cy="90" r="70" fill="var(--bg-tertiary)" />
+                <text x="90" y="95" text-anchor="middle" fill="var(--text-muted)" font-size="12">Sin datos</text>
+              {/if}
+            </svg>
+            <div class="pie-chart-legend">
+              {#each stockLabels as item}
+                <div class="pie-legend-item">
+                  <span class="pie-legend-dot" style="background: {item.color};"></span>
+                  <span class="pie-legend-label">{item.label}</span>
+                  <span class="pie-legend-count">{item.count}</span>
+                </div>
+              {/each}
+            </div>
+          </div>
+        </div>
+      </div>
+    {:else}
+      <div class="top-empty"><span class="text-muted">No se pudieron cargar los datos de inventario</span></div>
+    {/if}
+  </div>
+  {/if}
+
+  <!-- ─── Feature D: Reporte de Stock por Cantidad ─────────────────────── -->
+  {#if hasPermission(currentUser, 'view_reports_inventory')}
+  <div class="card" style="margin-bottom: var(--space-2xl);">
+    <div class="top-header">
+      <div>
+        <h3 style="font-weight: 700;">📦 Reporte de Stock por Cantidad</h3>
+        <p class="text-muted text-sm">Filtra productos por cantidad exacta en inventario</p>
+      </div>
+    </div>
+
+    <div class="period-bar">
+      <label class="filter-label" style="font-size: var(--font-size-sm); margin: 0;">Cantidad exacta:</label>
+      <input
+        class="input"
+        type="number"
+        min="0"
+        placeholder="ej: 0 para sin stock"
+        style="width: 160px; padding: 0.3rem 0.5rem; font-size: var(--font-size-sm);"
+        value={stockExactFilter ?? ''}
+        oninput={(e) => {
+          const v = (e.target as HTMLInputElement).value;
+          stockExactFilter = v === '' ? undefined : parseInt(v);
+        }}
+      />
+      <button class="btn btn-ghost btn-sm" onclick={() => { stockExactFilter = 0; }}>Stock 0</button>
+      <button class="btn btn-ghost btn-sm" onclick={() => { stockExactFilter = undefined; loadStockReport(); }}>Todos</button>
+    </div>
+
+    <!-- Summary -->
+    {#if stockItems.length > 0}
+      <div style="display: flex; gap: var(--space-md); flex-wrap: wrap; margin-bottom: var(--space-md);">
+        <div class="stat-card" style="flex: 1; min-width: 150px;">
+          <div class="stat-label">Productos</div>
+          <div class="stat-value">{stockItems.length}</div>
+        </div>
+        <div class="stat-card" style="flex: 1; min-width: 150px;">
+          <div class="stat-label">Capital total (Bs)</div>
+          <div class="stat-value" style="color: var(--accent-primary);">{fmt(stockTotalCapital)}</div>
+        </div>
+      </div>
+    {/if}
+
+    {#if stockLoading}
+      <div class="top-empty"><span class="text-muted">Cargando...</span></div>
+    {:else if stockItems.length === 0}
+      <div class="top-empty">
+        <span style="font-size: 2rem;">📦</span>
+        <span class="text-muted">No hay productos con el stock indicado</span>
+      </div>
+    {:else}
+      <div class="table-container">
+        <table>
+          <thead><tr>
+            <th>Producto</th><th>SKU</th><th>Categoría</th>
+            <th class="text-right">Stock</th>
+            <th class="text-right">P. Venta</th>
+            <th class="text-right">Capital (Bs)</th>
+          </tr></thead>
+          <tbody>
+            {#each stockItems as p}
+              <tr>
+                <td style="font-weight: 600;">{p.product_name}</td>
+                <td class="font-mono text-sm text-muted">{p.sku}</td>
+                <td class="text-muted">{p.category_name || '—'}</td>
+                <td class="text-right" style="font-weight: 700; {p.current_stock === 0 ? 'color: var(--accent-danger);' : ''}">{p.current_stock.toFixed(0)}</td>
+                <td class="text-right">Bs {p.sale_price.toFixed(2)}</td>
+                <td class="text-right" style="font-weight: 600;">Bs {p.stock_sale_value.toFixed(2)}</td>
+              </tr>
+            {/each}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="3" style="font-weight: 700;">TOTAL ({stockItems.length} productos)</td>
+              <td></td><td></td>
+              <td class="text-right" style="font-weight: 700;">Bs {stockTotalCapital.toFixed(2)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    {/if}
+  </div>
+  {/if}
+
+  <!-- ─── Feature E: Reporte por Rango de Vencimiento ─────────────────── -->
+  {#if hasPermission(currentUser, 'view_reports_inventory')}
+  <div class="card" style="margin-bottom: var(--space-2xl);">
+    <div class="top-header">
+      <div>
+        <h3 style="font-weight: 700;">📅 Reporte por Rango de Vencimiento</h3>
+        <p class="text-muted text-sm">Filtra productos según su fecha de vencimiento más próxima</p>
+      </div>
+      <div style="display: flex; gap: var(--space-sm);">
+        <button class="btn btn-ghost btn-sm" onclick={loadRangeReport} disabled={rangeLoading}>
+          🔍 Buscar
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick={exportRangeCsv} disabled={exporting || rangeItems.length === 0}>
+          ⬇️ CSV
+        </button>
+      </div>
+    </div>
+
+    <div class="period-bar" style="flex-wrap: wrap; gap: var(--space-md);">
+      <div class="custom-dates">
+        <label class="filter-label" style="font-size: var(--font-size-sm); margin: 0;">Desde:</label>
+        <input class="input" type="date" bind:value={rangeFrom} style="width: 150px;" />
+      </div>
+      <div class="custom-dates">
+        <label class="filter-label" style="font-size: var(--font-size-sm); margin: 0;">Hasta:</label>
+        <input class="input" type="date" bind:value={rangeTo} style="width: 150px;" />
+      </div>
+      <input
+        class="input"
+        placeholder="🔍 Buscar producto o SKU..."
+        bind:value={rangeSearch}
+        style="flex: 1; min-width: 200px; max-width: 300px;"
+      />
+      <div class="period-presets" style="gap: 4px;">
+        <button class="btn btn-ghost btn-sm" onclick={() => { rangeFrom = ''; rangeTo = new Date().toISOString().split('T')[0]; loadRangeReport(); }}>Vencidos</button>
+        <button class="btn btn-ghost btn-sm" onclick={() => { rangeFrom = ''; const d = new Date(); d.setMonth(d.getMonth() + 1); rangeTo = d.toISOString().split('T')[0]; loadRangeReport(); }}>≤ 1 mes</button>
+        <button class="btn btn-ghost btn-sm" onclick={() => { rangeFrom = ''; const d = new Date(); d.setMonth(d.getMonth() + 4); rangeTo = d.toISOString().split('T')[0]; loadRangeReport(); }}>≤ 4 meses</button>
+      </div>
+    </div>
+
+    {#if rangeLoading}
+      <div class="top-empty"><span class="text-muted">Cargando...</span></div>
+    {:else if rangeItems.length === 0}
+      <div class="top-empty">
+        <span style="font-size: 2rem;">📅</span>
+        <span class="text-muted">Selecciona un rango de fechas y presiona Buscar</span>
+      </div>
+    {:else}
+      <div style="display: flex; gap: var(--space-md); flex-wrap: wrap; margin-bottom: var(--space-md);">
+        <div class="stat-card" style="flex: 1; min-width: 130px;">
+          <div class="stat-label">Productos</div>
+          <div class="stat-value">{rangeItems.length}</div>
+        </div>
+        <div class="stat-card" style="flex: 1; min-width: 130px;">
+          <div class="stat-label">Capital (Bs)</div>
+          <div class="stat-value" style="color: var(--accent-warning);">{fmt(rangeTotalCapital)}</div>
+        </div>
+      </div>
+      <div class="table-container">
+        <table>
+          <thead><tr>
+            <th>Producto</th><th>SKU</th><th>Categoría</th><th>Dosis</th>
+            <th class="text-right">Stock</th>
+            <th class="text-right">P. Venta</th>
+            <th class="text-right">Capital</th>
+            <th>Vencimiento</th>
+            <th>Estado</th>
+          </tr></thead>
+          <tbody>
+            {#each rangeItems as p}
+              <tr
+                class:row-expired={p.expiry_status === 'expired'}
+                class:row-expiring={p.expiry_status === 'expiring'}
+              >
+                <td style="font-weight: 600;">{p.product_name}</td>
+                <td class="font-mono text-sm text-muted">{p.sku}</td>
+                <td class="text-muted">{p.category_name || '—'}</td>
+                <td>{#if p.dose}<span class="badge badge-info" style="font-size:0.7em;">{p.dose}</span>{:else}—{/if}</td>
+                <td class="text-right">{p.current_stock.toFixed(0)}</td>
+                <td class="text-right">Bs {p.sale_price.toFixed(2)}</td>
+                <td class="text-right" style="font-weight: 600;">Bs {p.stock_sale_value.toFixed(2)}</td>
+                <td>{p.nearest_expiry_date || 'Sin fecha'}</td>
+                <td><span class="badge {expiryBadgeClass(p.expiry_status)}">{expiryStatusLabel(p.expiry_status)}</span></td>
+              </tr>
+            {/each}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="6" style="font-weight: 700;">TOTAL ({rangeItems.length} productos)</td>
+              <td class="text-right" style="font-weight: 700;">Bs {rangeTotalCapital.toFixed(2)}</td>
+              <td colspan="2"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    {/if}
+  </div>
+  {/if}
+
 </div>
 
 <style>

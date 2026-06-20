@@ -51,6 +51,12 @@ pub fn run() {
             commands::customers::create_customer,
             commands::customers::update_customer,
             commands::customers::delete_customer,
+            // Suppliers
+            commands::suppliers::get_suppliers,
+            commands::suppliers::get_supplier,
+            commands::suppliers::create_supplier,
+            commands::suppliers::update_supplier,
+            commands::suppliers::delete_supplier,
             // Cash Register
             commands::cash_register::open_cash_register,
             commands::cash_register::close_cash_register,
@@ -64,6 +70,10 @@ pub fn run() {
             commands::dashboard::get_sales_chart_data,
             commands::dashboard::get_profit_margin_report,
             commands::dashboard::get_inventory_report,
+            commands::dashboard::get_expiry_report,
+            commands::dashboard::get_stock_report,
+            commands::dashboard::get_expiry_range_report,
+            commands::dashboard::get_inventory_chart_data,
             // Settings
             commands::settings::get_settings,
             commands::settings::update_setting,
@@ -95,6 +105,11 @@ pub fn run() {
             commands::license::get_license_status,
             commands::license::activate_license,
             commands::license::deactivate_license,
+            // Migración de datos legados
+            commands::migration::get_legacy_preview,
+            commands::migration::get_legacy_labs,
+            commands::migration::apply_legacy_migration,
+            commands::migration::get_suppliers_simple,
         ])
         .run(tauri::generate_context!())
         .expect("error while running AyniPOS");

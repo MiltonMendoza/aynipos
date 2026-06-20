@@ -16,6 +16,8 @@ export interface Product {
   metadata: string | null;
   created_at: string | null;
   updated_at: string | null;
+  supplier_id: string | null;
+  dose: string | null;
 }
 
 export interface CreateProduct {
@@ -30,6 +32,8 @@ export interface CreateProduct {
   unit?: string;
   min_stock?: number;
   metadata?: string;
+  supplier_id?: string;
+  dose?: string;
 }
 
 export interface UpdateProduct {
@@ -46,12 +50,17 @@ export interface UpdateProduct {
   min_stock?: number;
   is_active?: boolean;
   metadata?: string;
+  supplier_id?: string;
+  dose?: string;
 }
 
 export interface ProductWithStock {
   product: Product;
   current_stock: number;
   category_name: string | null;
+  supplier_name: string | null;
+  nearest_expiry_date: string | null;
+  expiry_status: string | null; // "active" | "expiring" | "expired" | null (sin lotes)
 }
 
 // ─── Category ──────────────────────────────────────────
@@ -137,6 +146,7 @@ export interface CreateSale {
   payment_details?: string;
   discount_amount?: number;
   notes?: string;
+  user_id?: string;
 }
 
 export interface CreateSaleItem {
@@ -219,6 +229,7 @@ export interface DashboardStats {
   total_products: number;
   low_stock_count: number;
   expiring_soon_count: number;
+  total_capital: number;
 }
 
 export interface TopSellingProduct {
@@ -260,6 +271,56 @@ export interface InventoryReportItem {
   days_without_movement: number | null;
 }
 
+export interface ExpiryReportItem {
+  product_id: string;
+  product_name: string;
+  sku: string;
+  category_name: string | null;     // categoría (equivalente a "tipo" en Valensoft)
+  supplier_name: string | null;     // proveedor
+  dose: string | null;              // dosis
+  current_stock: number;
+  sale_price: number;
+  purchase_price: number;
+  stock_sale_value: number;
+  nearest_expiry_date: string | null;
+  expiry_status: string;            // "active" | "expiring" | "expired"
+}
+
+// ─── Supplier ───────────────────────────────────────────
+
+export interface Supplier {
+  id: string;
+  name: string;
+  contact_name: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  notes: string | null;
+  is_active: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface CreateSupplier {
+  name: string;
+  contact_name?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  notes?: string;
+}
+
+export interface UpdateSupplier {
+  id: string;
+  name?: string;
+  contact_name?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  notes?: string;
+  is_active?: boolean;
+}
+
 // ─── Settings ──────────────────────────────────────────
 
 export interface Setting {
@@ -272,8 +333,10 @@ export interface Setting {
 export interface ImportResult {
   created: number;
   updated: number;
+  lots_created: number;
   errors: ImportError[];
 }
+
 
 export interface ImportError {
   row: number;
@@ -316,7 +379,7 @@ export interface UpdateUser {
 
 // ─── Navigation ────────────────────────────────────────
 
-export type AppRoute = 'pos' | 'inventory' | 'customers' | 'sales' | 'reports' | 'settings';
+export type AppRoute = 'pos' | 'inventory' | 'customers' | 'suppliers' | 'sales' | 'reports' | 'settings' | 'migration';
 
 // ─── Audit Log ────────────────────────────────────────
 
@@ -354,4 +417,76 @@ export interface LicenseStatus {
   days_remaining: number | null;
   license_type: string | null;
   expiry_date: string | null;
+}
+
+// ─── Stock Report ──────────────────────────────────────────
+
+export interface StockReportItem {
+  product_id: string;
+  product_name: string;
+  sku: string;
+  category_name: string | null;
+  current_stock: number;
+  sale_price: number;
+  stock_sale_value: number;
+}
+
+// ─── Inventory Chart Data ───────────────────────────────────
+
+export interface InventoryChartData {
+  expired_count: number;
+  expiring_count: number;
+  active_count: number;
+  stock_zero: number;
+  stock_1_5: number;
+  stock_6_10: number;
+  stock_gt_10: number;
+}
+
+// ─── Migración de Datos Legados (Plan B) ────────────────────────────────────
+
+export interface LegacyProductRow {
+  id: string;
+  sku: string;
+  name: string;
+  raw_description: string;
+  parsed_description: string;
+  parsed_dose: string;
+  parsed_lab: string;
+  current_dose: string | null;
+  current_supplier_id: string | null;
+  apply: boolean;
+}
+
+export interface LabEntry {
+  name: string;
+  count: number;
+  action: 'create' | 'ignore' | 'existing';
+  existing_supplier_id: string | null;
+}
+
+export interface ProductMigrationItem {
+  product_id: string;
+  new_description: string;
+  new_dose: string;
+  lab_name: string;
+  apply: boolean;
+}
+
+export interface LabMapEntry {
+  name: string;
+  action: 'create' | 'ignore' | 'existing';
+  existing_supplier_id: string | null;
+}
+
+export interface MigrationPayload {
+  products: ProductMigrationItem[];
+  lab_map: LabMapEntry[];
+}
+
+export interface MigrationResult {
+  products_updated: number;
+  suppliers_created: number;
+  suppliers_linked: number;
+  skipped: number;
 }

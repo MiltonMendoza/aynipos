@@ -2,12 +2,54 @@
   import { onMount } from 'svelte';
   import type { ProductWithStock, CartItem, Customer, CreateCustomer, Sale, SaleItem, User } from '$lib/types';
   import { getProducts, getProductByBarcode, createSale, getSaleItems, getCurrentCashRegister, getDashboardStats, getCustomers, createCustomer, getSettings, logAction } from '$lib/services/api';
+  import { DataTableState } from '$lib/utils/datatable.svelte';
+  import TablePagination from '$lib/components/TablePagination.svelte';
 
   let { currentUser }: { currentUser: User | null } = $props();
   import { playAddSound, playErrorSound, playSuccessSound, playScanSound } from '$lib/services/sounds';
   import { printReceipt, extractBusinessInfo, type BusinessInfo } from '$lib/services/receipt';
 
   let products: ProductWithStock[] = $state([]);
+  let viewMode = $state<'grid' | 'table'>('grid');
+  let posTable = new DataTableState<ProductWithStock>([], [
+    'product.sku',
+    'product.name',
+    'category_name'
+  ]);
+
+  function viewModeKey() {
+    return currentUser ? `pos_view_mode_${currentUser.id}` : 'pos_view_mode';
+  }
+
+  function setViewMode(mode: 'grid' | 'table') {
+    viewMode = mode;
+    localStorage.setItem(viewModeKey(), mode);
+  }
+
+  function getCardStyle(ps: ProductWithStock) {
+    const isExpired = ps.expiry_status === 'expired';
+    const isLowStock = ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0;
+    const isExpiring = ps.expiry_status === 'expiring' && !isLowStock;
+
+    if (isExpired || isLowStock) {
+      return {
+        bg: 'rgba(239, 68, 68, 0.07)',
+        border: 'var(--accent-danger)',
+        hoverBg: 'rgba(239, 68, 68, 0.12)'
+      };
+    } else if (isExpiring) {
+      return {
+        bg: 'rgba(245, 158, 11, 0.07)',
+        border: 'var(--accent-warning)',
+        hoverBg: 'rgba(245, 158, 11, 0.12)'
+      };
+    }
+    return {
+      bg: 'var(--bg-secondary)',
+      border: 'var(--border-color)',
+      hoverBg: 'var(--bg-hover)'
+    };
+  }
   let cart: CartItem[] = $state([]);
   let searchQuery = $state('');
   let cashRegisterOpen = $state(false);
@@ -48,7 +90,7 @@
   let customerSearchInputRef: HTMLInputElement | undefined = $state(undefined);
 
   // Dashboard quick stats
-  let stats = $state({ total_sales_today: 0, total_transactions_today: 0, total_products: 0, low_stock_count: 0, expiring_soon_count: 0 });
+  let stats = $state({ total_sales_today: 0, total_transactions_today: 0, total_products: 0, low_stock_count: 0, expiring_soon_count: 0, total_capital: 0 });
 
   // Feedback animations
   let showSuccessOverlay = $state(false);
@@ -113,6 +155,10 @@
   }
 
   onMount(async () => {
+    const saved = localStorage.getItem(viewModeKey());
+    if (saved === 'grid' || saved === 'table') {
+      viewMode = saved;
+    }
     try {
       const cr = await getCurrentCashRegister();
       cashRegisterOpen = cr !== null;
@@ -134,7 +180,12 @@
   async function loadProducts(search: string) {
     try {
       products = await getProducts(search || undefined);
-    } catch { products = []; }
+      posTable.data = products;
+      posTable.currentPage = 1;
+    } catch {
+      products = [];
+      posTable.data = [];
+    }
   }
 
   // ─── Customer Search ───
@@ -441,6 +492,7 @@
         payment_method: paymentMethod,
         discount_amount: gd > 0 ? gd : undefined,
         notes: saleNotes.trim() || undefined,
+        user_id: currentUser?.id,
       });
 
       // Save sale data for receipt printing
@@ -543,13 +595,33 @@
         {/if}
       </div>
 
-      <!-- Quick stats -->
-      <div class="flex gap-lg" style="margin-top: var(--space-md);">
-        <span class="text-sm text-muted">📊 Hoy: <strong style="color: var(--accent-success)">{formatCurrency(stats.total_sales_today)}</strong></span>
-        <span class="text-sm text-muted">🧾 {stats.total_transactions_today} ventas</span>
-        {#if stats.low_stock_count > 0}
-          <span class="badge badge-danger">{stats.low_stock_count} bajo stock</span>
-        {/if}
+      <!-- Quick stats and view toggle -->
+      <div class="flex items-center justify-between" style="margin-top: var(--space-md);">
+        <div class="flex gap-lg">
+          <span class="text-sm text-muted">📊 Hoy: <strong style="color: var(--accent-success)">{formatCurrency(stats.total_sales_today)}</strong></span>
+          <span class="text-sm text-muted">🧾 {stats.total_transactions_today} ventas</span>
+          {#if stats.low_stock_count > 0}
+            <span class="badge badge-danger">{stats.low_stock_count} bajo stock</span>
+          {/if}
+        </div>
+
+        <!-- Toggle view mode -->
+        <div class="flex gap-xs" style="background: var(--bg-tertiary); padding: 2px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+          <button
+            class="btn btn-sm"
+            style="padding: 2px 8px; height: 24px; font-size: 11px; border: none; cursor: pointer; background: {viewMode === 'grid' ? 'var(--accent-primary)' : 'transparent'}; color: {viewMode === 'grid' ? 'white' : 'var(--text-muted)'};"
+            onclick={(e) => { e.stopPropagation(); setViewMode('grid'); }}
+          >
+            🎴 Cuadrícula
+          </button>
+          <button
+            class="btn btn-sm"
+            style="padding: 2px 8px; height: 24px; font-size: 11px; border: none; cursor: pointer; background: {viewMode === 'table' ? 'var(--accent-primary)' : 'transparent'}; color: {viewMode === 'table' ? 'white' : 'var(--text-muted)'};"
+            onclick={(e) => { e.stopPropagation(); setViewMode('table'); }}
+          >
+            📋 Lista
+          </button>
+        </div>
       </div>
     </div>
 
@@ -564,55 +636,134 @@
           <p class="text-sm">Agrega productos desde el menú de Inventario</p>
         </div>
       {:else}
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--space-md);">
-          {#each products as ps}
-            <button
-              class="product-card"
-              onclick={() => addToCart(ps)}
-              disabled={ps.current_stock <= 0}
-              style="
-                background: var(--bg-secondary);
-                border: 1px solid {ps.current_stock <= 0 ? 'var(--accent-danger)' : 'var(--border-color)'};
-                border-radius: var(--radius-lg);
-                padding: var(--space-lg);
-                cursor: {ps.current_stock <= 0 ? 'not-allowed' : 'pointer'};
-                text-align: left;
-                transition: all var(--transition-fast);
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-sm);
-                color: var(--text-primary);
-                font-family: var(--font-family);
-                opacity: {ps.current_stock <= 0 ? '0.5' : '1'};
-              "
-              onmouseenter={(e) => { if (ps.current_stock > 0) { (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-primary)'; (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLElement).style.boxShadow = 'var(--shadow-glow-blue)'; }}}
-              onmouseleave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = ps.current_stock <= 0 ? 'var(--accent-danger)' : 'var(--border-color)'; (e.currentTarget as HTMLElement).style.transform = 'none'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
-            >
-              <div class="flex items-center justify-between">
-                <span class="text-xs text-muted">{ps.product.sku}</span>
-                {#if ps.current_stock <= 0}
-                  <span class="badge badge-danger">Sin stock</span>
-                {:else if ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0}
-                  <span class="badge badge-danger">Bajo</span>
+        {#if viewMode === 'grid'}
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--space-md);">
+            {#each products as ps}
+              {@const style = getCardStyle(ps)}
+              <button
+                class="product-card"
+                onclick={() => addToCart(ps)}
+                disabled={ps.current_stock <= 0}
+                style="
+                  background: {style.bg};
+                  border: 1px solid {style.border};
+                  border-radius: var(--radius-lg);
+                  padding: var(--space-lg);
+                  cursor: {ps.current_stock <= 0 ? 'not-allowed' : 'pointer'};
+                  text-align: left;
+                  transition: all var(--transition-fast);
+                  display: flex;
+                  flex-direction: column;
+                  gap: var(--space-sm);
+                  color: var(--text-primary);
+                  font-family: var(--font-family);
+                  opacity: {ps.current_stock <= 0 ? '0.5' : '1'};
+                "
+                onmouseenter={(e) => { if (ps.current_stock > 0) { (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-primary)'; (e.currentTarget as HTMLElement).style.background = style.hoverBg; (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLElement).style.boxShadow = 'var(--shadow-glow-blue)'; }}}
+                onmouseleave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = style.border; (e.currentTarget as HTMLElement).style.background = style.bg; (e.currentTarget as HTMLElement).style.transform = 'none'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
+              >
+                <div class="flex items-center justify-between">
+                  <span class="text-xs text-muted">{ps.product.sku}</span>
+                  <div class="flex gap-xs">
+                    {#if ps.expiry_status === 'expired'}
+                      <span class="badge badge-danger">Vencido</span>
+                    {:else if ps.expiry_status === 'expiring'}
+                      <span class="badge badge-warning">Por vencer</span>
+                    {/if}
+                    {#if ps.current_stock <= 0}
+                      <span class="badge badge-danger">Sin stock</span>
+                    {:else if ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0}
+                      <span class="badge badge-danger">Bajo</span>
+                    {/if}
+                  </div>
+                </div>
+                <div style="font-weight: 600; font-size: var(--font-size-base); line-height: 1.3;" class="truncate">
+                  {ps.product.name}
+                </div>
+                {#if ps.category_name}
+                  <div class="text-xs text-muted">{ps.category_name}</div>
                 {/if}
-              </div>
-              <div style="font-weight: 600; font-size: var(--font-size-base); line-height: 1.3;" class="truncate">
-                {ps.product.name}
-              </div>
-              {#if ps.category_name}
-                <div class="text-xs text-muted">{ps.category_name}</div>
-              {/if}
-              <div class="flex items-center justify-between" style="margin-top: auto;">
-                <span style="font-weight: 800; color: var(--accent-primary); font-size: var(--font-size-md);">
-                  {formatCurrency(ps.product.sale_price)}
-                </span>
-                <span class="text-xs" style="color: {ps.current_stock <= 0 ? 'var(--accent-danger)' : 'var(--text-muted)'};">
-                  Stock: {ps.current_stock}
-                </span>
-              </div>
-            </button>
-          {/each}
-        </div>
+                <div class="flex items-center justify-between" style="margin-top: auto;">
+                  <span style="font-weight: 800; color: var(--accent-primary); font-size: var(--font-size-md);">
+                    {formatCurrency(ps.product.sale_price)}
+                  </span>
+                  <span class="text-xs" style="color: {ps.current_stock <= 0 ? 'var(--accent-danger)' : 'var(--text-muted)'};">
+                    Stock: {ps.current_stock}
+                  </span>
+                </div>
+              </button>
+            {/each}
+          </div>
+        {:else if viewMode === 'table'}
+          <div style="display: flex; flex-direction: column; gap: var(--space-md); height: 100%;">
+            <div class="table-container" style="flex: 1; overflow-y: auto;">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th onclick={() => posTable.sortBy('product.sku')} style="cursor: pointer; user-select: none;">
+                      SKU {posTable.sortColumn === 'product.sku' ? (posTable.sortDirection === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th onclick={() => posTable.sortBy('product.name')} style="cursor: pointer; user-select: none;">
+                      Producto {posTable.sortColumn === 'product.name' ? (posTable.sortDirection === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th onclick={() => posTable.sortBy('category_name')} style="cursor: pointer; user-select: none;">
+                      Categoría {posTable.sortColumn === 'category_name' ? (posTable.sortDirection === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th onclick={() => posTable.sortBy('product.dose')} style="cursor: pointer; user-select: none;">
+                      Dosis {posTable.sortColumn === 'product.dose' ? (posTable.sortDirection === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th onclick={() => posTable.sortBy('product.sale_price')} style="cursor: pointer; user-select: none;">
+                      Precio {posTable.sortColumn === 'product.sale_price' ? (posTable.sortDirection === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th onclick={() => posTable.sortBy('current_stock')} style="cursor: pointer; user-select: none;">
+                      Stock {posTable.sortColumn === 'current_stock' ? (posTable.sortDirection === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th onclick={() => posTable.sortBy('nearest_expiry_date')} style="cursor: pointer; user-select: none;">
+                      Vencimiento {posTable.sortColumn === 'nearest_expiry_date' ? (posTable.sortDirection === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each posTable.paginated as ps}
+                    <tr
+                      class:row-expired={ps.expiry_status === 'expired'}
+                      class:row-low-stock={ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0}
+                      class:row-expiring={ps.expiry_status === 'expiring' && !(ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0)}
+                      style="cursor: {ps.current_stock <= 0 ? 'not-allowed' : 'pointer'}; opacity: {ps.current_stock <= 0 ? '0.5' : '1'};"
+                      onclick={() => { if (ps.current_stock > 0) addToCart(ps); }}
+                    >
+                      <td class="font-mono text-sm">{ps.product.sku}</td>
+                      <td style="font-weight: 600;">{ps.product.name}</td>
+                      <td class="text-muted">{ps.category_name || '—'}</td>
+                      <td class="text-muted">
+                        {#if ps.product.dose}
+                          <span class="badge badge-info" style="font-size: var(--font-size-xs);">{ps.product.dose}</span>
+                        {:else}—{/if}
+                      </td>
+                      <td style="font-weight: 600; color: var(--accent-primary);">{formatCurrency(ps.product.sale_price)}</td>
+                      <td style="font-weight: 700;">
+                        {ps.current_stock}
+                        {#if ps.product.min_stock > 0}
+                          <span style="font-weight: 400; font-size: var(--font-size-xs); color: var(--text-muted); margin-left: 2px;">
+                            (Min: {ps.product.min_stock})
+                          </span>
+                        {/if}
+                      </td>
+                      <td style="font-weight: 500;">
+                        {#if ps.nearest_expiry_date}
+                          {new Date(ps.nearest_expiry_date + 'T12:00:00').toLocaleDateString('es-BO', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        {:else}
+                          —
+                        {/if}
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+            <TablePagination table={posTable} />
+          </div>
+        {/if}
       {/if}
     </div>
   </div>

@@ -2,16 +2,19 @@ import { invoke } from '@tauri-apps/api/core';
 import type {
   ProductWithStock, CreateProduct, UpdateProduct,
   Customer, CreateCustomer,
+  Supplier, CreateSupplier, UpdateSupplier,
   Sale, SaleItem, CreateSale,
   CashRegister, CashRegisterReport, ExpectedClosingInfo,
   InventoryMovement, InventoryLot,
-  DashboardStats, TopSellingProduct, SalesChartDataPoint, ProfitMarginProduct, InventoryReportItem,
+  DashboardStats, TopSellingProduct, SalesChartDataPoint, ProfitMarginProduct,
+  InventoryReportItem, ExpiryReportItem, StockReportItem, InventoryChartData,
   Setting, Category, CreateCategory,
   ImportResult,
   User, CreateUser, UpdateUser,
   AuditLogEntry,
   BackupResult, BackupInfo,
-  LicenseStatus
+  LicenseStatus,
+  LegacyProductRow, LabEntry, MigrationPayload, MigrationResult
 } from '$lib/types';
 
 // ─── Products ──────────────────────────────────────────
@@ -56,8 +59,8 @@ export async function createSale(sale: CreateSale): Promise<Sale> {
   return invoke('create_sale', { sale });
 }
 
-export async function getSales(dateFrom?: string, dateTo?: string, status?: string): Promise<Sale[]> {
-  return invoke('get_sales', { dateFrom, dateTo, status });
+export async function getSales(dateFrom?: string, dateTo?: string, status?: string, userId?: string): Promise<Sale[]> {
+  return invoke('get_sales', { dateFrom, dateTo, status, userId });
 }
 
 export async function getSaleItems(saleId: string): Promise<SaleItem[]> {
@@ -109,6 +112,28 @@ export async function updateCustomer(id: string, customer: CreateCustomer): Prom
 
 export async function deleteCustomer(id: string): Promise<void> {
   return invoke('delete_customer', { id });
+}
+
+// ─── Suppliers ─────────────────────────────────────────
+
+export async function getSuppliers(search?: string): Promise<Supplier[]> {
+  return invoke('get_suppliers', { search });
+}
+
+export async function getSupplier(id: string): Promise<Supplier> {
+  return invoke('get_supplier', { id });
+}
+
+export async function createSupplier(supplier: CreateSupplier): Promise<Supplier> {
+  return invoke('create_supplier', { supplier });
+}
+
+export async function updateSupplier(supplier: UpdateSupplier): Promise<void> {
+  return invoke('update_supplier', { supplier });
+}
+
+export async function deleteSupplier(id: string): Promise<void> {
+  return invoke('delete_supplier', { id });
 }
 
 // ─── Cash Register ─────────────────────────────────────
@@ -163,6 +188,22 @@ export async function getProfitMarginReport(
 
 export async function getInventoryReport(inactiveDays?: number): Promise<InventoryReportItem[]> {
   return invoke('get_inventory_report', { inactiveDays });
+}
+
+export async function getExpiryReport(statusFilter?: string, search?: string): Promise<ExpiryReportItem[]> {
+  return invoke('get_expiry_report', { statusFilter, search });
+}
+
+export async function getStockReport(exactStock?: number): Promise<StockReportItem[]> {
+  return invoke('get_stock_report', { exactStock });
+}
+
+export async function getExpiryRangeReport(expiryFrom?: string, expiryTo?: string, search?: string): Promise<ExpiryReportItem[]> {
+  return invoke('get_expiry_range_report', { expiryFrom, expiryTo, search });
+}
+
+export async function getInventoryChartData(): Promise<InventoryChartData> {
+  return invoke('get_inventory_chart_data');
 }
 
 // ─── Settings ──────────────────────────────────────────
@@ -267,4 +308,22 @@ export async function activateLicense(key: string): Promise<LicenseStatus> {
 
 export async function deactivateLicense(): Promise<void> {
   return invoke('deactivate_license');
+}
+
+// ─── Migración de Datos Legados ────────────────────────────────────────────
+
+export async function getLegacyPreview(): Promise<LegacyProductRow[]> {
+  return invoke('get_legacy_preview');
+}
+
+export async function getLegacyLabs(): Promise<LabEntry[]> {
+  return invoke('get_legacy_labs');
+}
+
+export async function applyLegacyMigration(payload: MigrationPayload): Promise<MigrationResult> {
+  return invoke('apply_legacy_migration', { payload });
+}
+
+export async function getSuppliersSimple(): Promise<[string, string][]> {
+  return invoke('get_suppliers_simple');
 }

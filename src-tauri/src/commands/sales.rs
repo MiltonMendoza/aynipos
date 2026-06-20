@@ -49,6 +49,8 @@ pub fn create_sale(db: State<'_, Database>, sale: CreateSale) -> Result<Sale, St
                     metadata: row.get(12)?,
                     created_at: row.get(13)?,
                     updated_at: row.get(14)?,
+                    supplier_id: row.get(15)?,
+                    dose: row.get(16)?,
                 })
             },
         ).map_err(|e| format!("Product {} not found: {}", item.product_id, e))?;
@@ -79,12 +81,12 @@ pub fn create_sale(db: State<'_, Database>, sale: CreateSale) -> Result<Sale, St
 
     // Insert sale
     conn.execute(
-        "INSERT INTO sales (id, sale_number, customer_id, cash_register_id, subtotal, tax_amount, discount_amount, total, payment_method, payment_details, status, notes)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'completed', ?11)",
+        "INSERT INTO sales (id, sale_number, customer_id, cash_register_id, subtotal, tax_amount, discount_amount, total, payment_method, payment_details, status, notes, user_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'completed', ?11, ?12)",
         rusqlite::params![
             &sale_id, sale_number, &sale.customer_id, &cash_register_id,
             subtotal, tax_amount, discount_amount, total,
-            &sale.payment_method, &sale.payment_details, &sale.notes
+            &sale.payment_method, &sale.payment_details, &sale.notes, &sale.user_id
         ],
     ).map_err(|e| e.to_string())?;
 
@@ -158,7 +160,7 @@ pub fn create_sale(db: State<'_, Database>, sale: CreateSale) -> Result<Sale, St
 }
 
 #[tauri::command]
-pub fn get_sales(db: State<'_, Database>, date_from: Option<String>, date_to: Option<String>, status: Option<String>) -> Result<Vec<Sale>, String> {
+pub fn get_sales(db: State<'_, Database>, date_from: Option<String>, date_to: Option<String>, status: Option<String>, user_id: Option<String>) -> Result<Vec<Sale>, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
     let mut query = String::from(
@@ -182,7 +184,13 @@ pub fn get_sales(db: State<'_, Database>, date_from: Option<String>, date_to: Op
     if let Some(ref s) = status {
         query.push_str(&format!(" AND s.status = ?{}", idx));
         params.push(Box::new(s.clone()));
-        // idx += 1;
+        idx += 1;
+    }
+
+    if let Some(ref uid) = user_id {
+        query.push_str(&format!(" AND (s.user_id = ?{} OR s.user_id IS NULL)", idx));
+        params.push(Box::new(uid.clone()));
+        let _ = idx; // last param
     }
 
     query.push_str(" ORDER BY s.created_at DESC");

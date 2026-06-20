@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Sale, SaleItem, User } from '$lib/types';
-  import { getSales, getSaleItems, cancelSale, getSettings, logAction } from '$lib/services/api';
+  import { getSales, getSaleItems, cancelSale, getSettings, logAction, getUsers } from '$lib/services/api';
   import { printReceipt, extractBusinessInfo, type BusinessInfo } from '$lib/services/receipt';
   import { hasPermission } from '$lib/services/permissions';
+  import { DataTableState } from '$lib/utils/datatable.svelte';
+  import TablePagination from '$lib/components/TablePagination.svelte';
 
   let { currentUser }: { currentUser: User | null } = $props();
 
@@ -13,11 +15,26 @@
   let loading = $state(true);
   let businessInfo: BusinessInfo = $state({ name: 'Mi Negocio', nit: '', address: '', phone: '', city: '' });
 
+  let table = new DataTableState<Sale>([], [
+    'sale_number',
+    'customer_name',
+    'payment_method',
+    'status'
+  ]);
+
+  $effect(() => {
+    table.currentPage;
+    table.search;
+    selectedSale = null;
+  });
+
   // ─── Filtros ───────────────────────────────────────────
   let dateFrom = $state('');
   let dateTo = $state('');
   let statusFilter = $state('');
   let activePreset = $state('hoy');
+  let userFilter = $state('');
+  let allUsers: User[] = $state([]);
 
   // ─── Resumen ───────────────────────────────────────────
   let summaryTotal = $derived(
@@ -25,12 +42,19 @@
   );
   let summaryCount = $derived(sales.length);
   let summaryCompleted = $derived(sales.filter(s => s.status === 'completed').length);
+  let summaryCancelled = $derived(sales.filter(s => s.status === 'cancelled').length);
 
   onMount(async () => {
     try {
       const allSettings = await getSettings();
       businessInfo = extractBusinessInfo(allSettings);
     } catch { /* ignore */ }
+    if (currentUser?.role === 'cashier') {
+      userFilter = currentUser.id; // cajero: sus ventas + históricas (NULL user_id)
+    } else {
+      try { allUsers = await getUsers(); } catch { allUsers = []; }
+      userFilter = ''; // admin/inventarista: todas las ventas por defecto
+    }
     applyPreset('hoy');
   });
 
@@ -85,8 +109,13 @@
       const from = dateFrom ? dateFrom + ' 00:00:00' : undefined;
       const to = dateTo ? dateTo + ' 23:59:59' : undefined;
       const st = statusFilter || undefined;
-      sales = await getSales(from, to, st);
-    } catch { sales = []; }
+      sales = await getSales(from, to, st, userFilter || undefined);
+      table.data = sales;
+      table.currentPage = 1;
+    } catch {
+      sales = [];
+      table.data = [];
+    }
     loading = false;
   }
 
@@ -149,19 +178,50 @@
     <div class="filters-row">
       <div class="filter-group">
         <label class="filter-label">Desde</label>
-        <input type="date" class="input" bind:value={dateFrom} onchange={onDateChange} />
+        <input type="date" class="input input-compact" bind:value={dateFrom} onchange={onDateChange} />
       </div>
       <div class="filter-group">
         <label class="filter-label">Hasta</label>
-        <input type="date" class="input" bind:value={dateTo} onchange={onDateChange} />
+        <input type="date" class="input input-compact" bind:value={dateTo} onchange={onDateChange} />
       </div>
       <div class="filter-group">
         <label class="filter-label">Estado</label>
-        <select class="select" bind:value={statusFilter} onchange={onStatusChange}>
+        <select class="select select-compact" bind:value={statusFilter} onchange={onStatusChange}>
           <option value="">Todos</option>
           <option value="completed">Completadas</option>
           <option value="cancelled">Anuladas</option>
         </select>
+      </div>
+      {#if currentUser && currentUser.role !== 'cashier'}
+        <div class="filter-group">
+          <label class="filter-label">Cajero</label>
+          <select class="select select-compact" bind:value={userFilter} onchange={loadSales}>
+            <option value="">Todos</option>
+            {#each allUsers as u}
+              <option value={u.id}>{u.name}</option>
+            {/each}
+          </select>
+        </div>
+      {/if}
+      <div class="filter-group" style="flex: 1; min-width: 180px;">
+        <label class="filter-label">Buscar</label>
+        <div style="position: relative;">
+          <input
+            class="input input-compact"
+            style="padding-right: 30px !important;"
+            placeholder="🔍 N° Venta, cliente, método..."
+            bind:value={table.search}
+            oninput={() => table.currentPage = 1}
+          />
+          {#if table.search}
+            <button
+              onclick={() => { table.search = ''; table.currentPage = 1; }}
+              style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 4px;"
+            >
+              ✕
+            </button>
+          {/if}
+        </div>
       </div>
       <div class="presets-group">
         <button class="btn btn-sm {activePreset === 'hoy' ? 'btn-primary' : 'btn-ghost'}" onclick={() => applyPreset('hoy')}>Hoy</button>
@@ -173,77 +233,81 @@
     </div>
 
     <!-- Resumen de ventas filtradas -->
-    <div class="summary-row">
-      <div class="summary-item">
-        <span class="summary-icon green">💰</span>
-        <div>
-          <div class="summary-value">{formatCurrency(summaryTotal)}</div>
-          <div class="summary-label">Total vendido</div>
-        </div>
+    <div style="display: flex; gap: var(--space-md); flex-wrap: wrap; padding-top: var(--space-md); border-top: 1px solid var(--border-color);">
+      <div class="stat-card" style="flex: 1; min-width: 180px;">
+        <div class="stat-label">Total Ventas (periodo)</div>
+        <div class="stat-value" style="color: var(--accent-success);">{formatCurrency(summaryTotal)}</div>
+        <div class="stat-sub">{summaryCompleted} ventas completadas</div>
       </div>
-      <div class="summary-item">
-        <span class="summary-icon blue">🧾</span>
-        <div>
-          <div class="summary-value">{summaryCount}</div>
-          <div class="summary-label">Transacciones</div>
-        </div>
-      </div>
-      <div class="summary-item">
-        <span class="summary-icon purple">✅</span>
-        <div>
-          <div class="summary-value">{summaryCompleted}</div>
-          <div class="summary-label">Completadas</div>
-        </div>
+      <div class="stat-card" style="flex: 1; min-width: 180px;">
+        <div class="stat-label">Total Transacciones</div>
+        <div class="stat-value">{summaryCount}</div>
+        <div class="stat-sub">{summaryCancelled} anuladas</div>
       </div>
     </div>
   </div>
 
   <div style="display: flex; gap: var(--space-xl); height: calc(100vh - 320px);">
-    <!-- Sales list -->
-    <div style="flex: 1; overflow-y: auto;" class="table-container">
-      {#if loading}
-        <div class="text-center text-muted" style="padding: var(--space-3xl);">Cargando ventas...</div>
-      {:else}
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Fecha</th>
-            <th>Cliente</th>
-            <th>Total</th>
-            <th>Pago</th>
-            <th>Estado</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#if sales.length === 0}
-            <tr><td colspan="6" class="text-center text-muted" style="padding: var(--space-3xl);">No hay ventas en el período seleccionado</td></tr>
-          {:else}
-            {#each sales as sale}
-              <tr
-                onclick={() => viewSale(sale)}
-                style="cursor: pointer; {selectedSale?.id === sale.id ? 'background: var(--accent-primary-glow);' : ''}"
-              >
-                <td style="font-weight: 700;">#{sale.sale_number}</td>
-                <td>{formatDate(sale.created_at)}</td>
-                <td class="text-sm">
-                  <div class="truncate" style="max-width: 120px;">{sale.customer_name || 'Sin Nombre'}</div>
-                </td>
-                <td style="font-weight: 700; color: var(--accent-success);">{formatCurrency(sale.total)}</td>
-                <td>
-                  {#if sale.payment_method === 'efectivo'}💵
-                  {:else if sale.payment_method === 'tarjeta'}💳
-                  {:else if sale.payment_method === 'qr'}📱
-                  {:else}💰{/if}
-                  {sale.payment_method}
-                </td>
-                <td><span class="badge {statusBadge(sale.status).class}">{statusBadge(sale.status).label}</span></td>
-              </tr>
-            {/each}
-          {/if}
-        </tbody>
-      </table>
-      {/if}
+    <!-- Sales list wrapper -->
+    <div style="flex: 1; display: flex; flex-direction: column; gap: var(--space-sm); min-width: 0;">
+      <div style="flex: 1; overflow-y: auto;" class="table-container">
+        {#if loading}
+          <div class="text-center text-muted" style="padding: var(--space-3xl);">Cargando ventas...</div>
+        {:else}
+        <table>
+          <thead>
+            <tr>
+              <th onclick={() => table.sortBy('sale_number')} style="cursor: pointer; user-select: none;">
+                # {table.sortColumn === 'sale_number' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+              </th>
+              <th onclick={() => table.sortBy('created_at')} style="cursor: pointer; user-select: none;">
+                Fecha {table.sortColumn === 'created_at' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+              </th>
+              <th onclick={() => table.sortBy('customer_name')} style="cursor: pointer; user-select: none;">
+                Cliente {table.sortColumn === 'customer_name' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+              </th>
+              <th onclick={() => table.sortBy('total')} style="cursor: pointer; user-select: none;">
+                Total {table.sortColumn === 'total' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+              </th>
+              <th onclick={() => table.sortBy('payment_method')} style="cursor: pointer; user-select: none;">
+                Pago {table.sortColumn === 'payment_method' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+              </th>
+              <th onclick={() => table.sortBy('status')} style="cursor: pointer; user-select: none;">
+                Estado {table.sortColumn === 'status' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {#if table.paginated.length === 0}
+              <tr><td colspan="6" class="text-center text-muted" style="padding: var(--space-3xl);">No hay ventas en el período seleccionado</td></tr>
+            {:else}
+              {#each table.paginated as sale}
+                <tr
+                  onclick={() => viewSale(sale)}
+                  style="cursor: pointer; {selectedSale?.id === sale.id ? 'background: var(--accent-primary-glow);' : ''}"
+                >
+                  <td style="font-weight: 700;">#{sale.sale_number}</td>
+                  <td>{formatDate(sale.created_at)}</td>
+                  <td class="text-sm">
+                    <div class="truncate" style="max-width: 120px;">{sale.customer_name || 'Sin Nombre'}</div>
+                  </td>
+                  <td style="font-weight: 700; color: var(--accent-success);">{formatCurrency(sale.total)}</td>
+                  <td>
+                    {#if sale.payment_method === 'efectivo'}💵
+                    {:else if sale.payment_method === 'tarjeta'}💳
+                    {:else if sale.payment_method === 'qr'}📱
+                    {:else}💰{/if}
+                    {sale.payment_method}
+                  </td>
+                  <td><span class="badge {statusBadge(sale.status).class}">{statusBadge(sale.status).label}</span></td>
+                </tr>
+              {/each}
+            {/if}
+          </tbody>
+        </table>
+        {/if}
+      </div>
+      <TablePagination {table} />
     </div>
 
     <!-- Sale detail -->
@@ -352,17 +416,17 @@
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
-    padding: var(--space-lg);
-    margin-bottom: var(--space-lg);
+    padding: var(--space-sm) var(--space-md);
+    margin-bottom: var(--space-md);
     display: flex;
     flex-direction: column;
-    gap: var(--space-lg);
+    gap: var(--space-sm);
   }
 
   .filters-row {
     display: flex;
     align-items: flex-end;
-    gap: var(--space-lg);
+    gap: var(--space-md);
     flex-wrap: wrap;
   }
 
@@ -383,7 +447,7 @@
   .filter-group .input,
   .filter-group .select {
     width: 160px;
-    height: 36px;
+    height: 32px;
     font-size: var(--font-size-sm);
   }
 
@@ -396,7 +460,7 @@
   .btn-sm {
     padding: var(--space-xs) var(--space-md);
     font-size: var(--font-size-xs);
-    height: 36px;
+    height: 32px;
   }
 
   .summary-row {
