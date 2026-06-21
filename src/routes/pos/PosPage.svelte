@@ -677,15 +677,22 @@
                 onmouseenter={(e) => { if (ps.current_stock > 0) { (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-primary)'; (e.currentTarget as HTMLElement).style.background = style.hoverBg; (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLElement).style.boxShadow = 'var(--shadow-glow-blue)'; }}}
                 onmouseleave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = style.border; (e.currentTarget as HTMLElement).style.background = style.bg; (e.currentTarget as HTMLElement).style.transform = 'none'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
               >
-                <!-- Fila 1: SKU + badge Proveedor -->
+                <!-- Fila 1: SKU + badge Proveedor resaltado -->
                 <div class="flex items-center justify-between" style="gap: var(--space-xs); flex-wrap: wrap;">
                   <span class="text-xs text-muted">{ps.product.sku}</span>
                   {#if ps.supplier_name}
-                    <span class="badge" style="font-size: var(--font-size-xs); background: var(--bg-tertiary); color: var(--text-muted); border: 1px solid var(--border-color);">{ps.supplier_name}</span>
+                    <span style="
+                      font-size: var(--font-size-sm); font-weight: 700;
+                      padding: 3px 10px; border-radius: 999px;
+                      background: var(--accent-primary-glow);
+                      color: var(--accent-primary);
+                      border: 1px solid var(--accent-primary);
+                      letter-spacing: 0.02em;
+                    ">{ps.supplier_name}</span>
                   {/if}
                 </div>
-                <!-- Nombre -->
-                <div style="font-weight: 600; font-size: var(--font-size-base); line-height: 1.3;" class="truncate">
+                <!-- Nombre — resaltado principal -->
+                <div style="font-weight: 800; font-size: var(--font-size-xl); line-height: 1.2; letter-spacing: -0.01em;" class="truncate">
                   {ps.product.name}
                 </div>
                 <!-- Dosis -->
@@ -712,9 +719,9 @@
                     Vence: {new Date(ps.nearest_expiry_date + 'T12:00:00').toLocaleDateString('es-BO', { day: '2-digit', month: 'short', year: 'numeric' })}
                   </div>
                 {/if}
-                <!-- Footer: Precio + Stock chip -->
-                <div class="flex items-center justify-between" style="margin-top: auto;">
-                  <span style="font-weight: 800; color: var(--accent-primary); font-size: var(--font-size-md);">
+                <!-- Footer: Precio resaltado + Stock chip -->
+                <div class="flex items-center justify-between" style="margin-top: auto; padding-top: var(--space-sm); border-top: 1px solid var(--border-color);">
+                  <span style="font-weight: 900; color: var(--accent-primary); font-size: 1.6rem; letter-spacing: -0.02em; line-height: 1;">
                     {formatCurrency(ps.product.sale_price)}
                   </span>
                   <span style="
