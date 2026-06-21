@@ -124,6 +124,8 @@ export interface Sale {
   cuf: string | null;
   siat_status: string | null;
   created_at: string | null;
+  item_count: number | null;
+  first_product: string | null;
 }
 
 export interface SaleItem {

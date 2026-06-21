@@ -3,23 +3,42 @@ use crate::db::models::*;
 use tauri::State;
 
 #[tauri::command]
-pub fn get_dashboard_stats(db: State<'_, Database>) -> Result<DashboardStats, String> {
+pub fn get_dashboard_stats(db: State<'_, Database>, user_id: Option<String>) -> Result<DashboardStats, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
     let today = (chrono::Utc::now() - chrono::Duration::hours(4)).format("%Y-%m-%d").to_string();
 
-    let total_sales_today: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(total), 0) FROM sales WHERE DATE(created_at) = ?1 AND status = 'completed'",
-        [&today],
-        |row| row.get(0),
-    ).unwrap_or(0.0);
+    // Ventas del día — filtradas por user_id si se proporciona (cajero solo ve las suyas)
+    let total_sales_today: f64 = if let Some(ref uid) = user_id {
+        conn.query_row(
+            "SELECT COALESCE(SUM(total), 0) FROM sales WHERE DATE(created_at) = ?1 AND status = 'completed' AND user_id = ?2",
+            rusqlite::params![&today, uid],
+            |row| row.get(0),
+        ).unwrap_or(0.0)
+    } else {
+        conn.query_row(
+            "SELECT COALESCE(SUM(total), 0) FROM sales WHERE DATE(created_at) = ?1 AND status = 'completed'",
+            [&today],
+            |row| row.get(0),
+        ).unwrap_or(0.0)
+    };
 
-    let total_transactions_today: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM sales WHERE DATE(created_at) = ?1 AND status = 'completed'",
-        [&today],
-        |row| row.get(0),
-    ).unwrap_or(0);
+    // Transacciones del día — igual filtrado
+    let total_transactions_today: i64 = if let Some(ref uid) = user_id {
+        conn.query_row(
+            "SELECT COUNT(*) FROM sales WHERE DATE(created_at) = ?1 AND status = 'completed' AND user_id = ?2",
+            rusqlite::params![&today, uid],
+            |row| row.get(0),
+        ).unwrap_or(0)
+    } else {
+        conn.query_row(
+            "SELECT COUNT(*) FROM sales WHERE DATE(created_at) = ?1 AND status = 'completed'",
+            [&today],
+            |row| row.get(0),
+        ).unwrap_or(0)
+    };
 
+    // Inventario — siempre global (el cajero necesita saber qué hay en stock)
     let total_products: i64 = conn.query_row(
         "SELECT COUNT(*) FROM products WHERE is_active = 1",
         [],
@@ -68,6 +87,7 @@ pub fn get_top_selling_products(
     date_from: Option<String>,
     date_to: Option<String>,
     limit: Option<i64>,
+    user_id: Option<String>,
 ) -> Result<Vec<TopSellingProduct>, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let actual_limit = limit.unwrap_or(10);
@@ -82,6 +102,7 @@ pub fn get_top_selling_products(
              WHERE s.status = 'completed'
                AND (?1 IS NULL OR DATE(s.created_at) >= ?1)
                AND (?2 IS NULL OR DATE(s.created_at) <= ?2)
+               AND (?4 IS NULL OR s.user_id = ?4)
              GROUP BY si.product_id, si.product_name
              ORDER BY total_quantity DESC
              LIMIT ?3",
@@ -90,7 +111,7 @@ pub fn get_top_selling_products(
 
     let rows = stmt
         .query_map(
-            rusqlite::params![date_from, date_to, actual_limit],
+            rusqlite::params![date_from, date_to, actual_limit, user_id],
             |row| {
                 Ok(TopSellingProduct {
                     product_id: row.get(0)?,
@@ -116,6 +137,7 @@ pub fn get_sales_chart_data(
     date_from: Option<String>,
     date_to: Option<String>,
     group_by: Option<String>,
+    user_id: Option<String>,
 ) -> Result<Vec<SalesChartDataPoint>, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let grouping = group_by.unwrap_or_else(|| "day".to_string());
@@ -134,6 +156,7 @@ pub fn get_sales_chart_data(
          WHERE status = 'completed'
            AND (?1 IS NULL OR DATE(created_at) >= ?1)
            AND (?2 IS NULL OR DATE(created_at) <= ?2)
+           AND (?3 IS NULL OR user_id = ?3)
          GROUP BY label
          ORDER BY label ASC"
     );
@@ -141,7 +164,7 @@ pub fn get_sales_chart_data(
     let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
 
     let rows = stmt
-        .query_map(rusqlite::params![date_from, date_to], |row| {
+        .query_map(rusqlite::params![date_from, date_to, user_id], |row| {
             Ok(SalesChartDataPoint {
                 label: row.get(0)?,
                 total_sales: row.get(1)?,

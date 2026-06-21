@@ -164,20 +164,20 @@ export async function getExpectedClosingAmount(): Promise<ExpectedClosingInfo> {
 
 // ─── Dashboard ─────────────────────────────────────────
 
-export async function getDashboardStats(): Promise<DashboardStats> {
-  return invoke('get_dashboard_stats');
+export async function getDashboardStats(userId?: string): Promise<DashboardStats> {
+  return invoke('get_dashboard_stats', { userId });
 }
 
 export async function getTopSellingProducts(
-  dateFrom?: string, dateTo?: string, limit?: number
+  dateFrom?: string, dateTo?: string, limit?: number, userId?: string
 ): Promise<TopSellingProduct[]> {
-  return invoke('get_top_selling_products', { dateFrom, dateTo, limit });
+  return invoke('get_top_selling_products', { dateFrom, dateTo, limit, userId });
 }
 
 export async function getSalesChartData(
-  dateFrom?: string, dateTo?: string, groupBy?: string
+  dateFrom?: string, dateTo?: string, groupBy?: string, userId?: string
 ): Promise<SalesChartDataPoint[]> {
-  return invoke('get_sales_chart_data', { dateFrom, dateTo, groupBy });
+  return invoke('get_sales_chart_data', { dateFrom, dateTo, groupBy, userId });
 }
 
 export async function getProfitMarginReport(

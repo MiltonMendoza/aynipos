@@ -3,8 +3,8 @@
   import '../app.css';
   import type { AppRoute, User, LicenseStatus } from '$lib/types';
   import { canAccessRoute, getDefaultRoute, getRoleLabel, getRoleIcon } from '$lib/services/permissions';
-  import { logAction, getLicenseStatus, getSettings, updateSetting } from '$lib/services/api';
-  import { applyUiTheme, DEFAULT_UI_THEME, getUiThemeFromSettings, UI_THEME_SETTING_KEY } from '$lib/services/theme';
+  import { logAction, getLicenseStatus } from '$lib/services/api';
+  import { applyUiTheme, getUserTheme, saveUserTheme, type AppTheme } from '$lib/services/theme';
 
   let { children } = $props();
 
@@ -15,6 +15,7 @@
   let currentUser: User | null = $state(null);
   let licenseStatus: LicenseStatus | null = $state(null);
   let licenseLoading = $state(true);
+  let activeTheme = $state<AppTheme>('dark');
 
   onMount(() => {
     void bootstrapUiTheme();
@@ -22,18 +23,9 @@
   });
 
   async function bootstrapUiTheme() {
-    try {
-      const settings = await getSettings();
-      const { resolvedTheme, needsPersist } = getUiThemeFromSettings(settings);
-      applyUiTheme(resolvedTheme);
-
-      if (needsPersist) {
-        await updateSetting(UI_THEME_SETTING_KEY, resolvedTheme);
-      }
-    } catch (e) {
-      console.error('Theme bootstrap failed:', e);
-      applyUiTheme(DEFAULT_UI_THEME);
-    }
+    // Por defecto usar el tema oscuro al iniciar la app (antes del login)
+    applyUiTheme('dark');
+    activeTheme = 'dark';
   }
 
   async function checkLicense() {
@@ -82,12 +74,27 @@
   function handleLogin(user: User) {
     currentUser = user;
     currentRoute = getDefaultRoute(user);
+    // Restaurar tema del usuario
+    const theme = getUserTheme(user.id);
+    activeTheme = theme;
+    applyUiTheme(theme);
     logAction(user.id, user.name, 'user_login', 'user', user.id, `${user.name} inició sesión`);
   }
 
   function handleLogout() {
     currentUser = null;
     currentRoute = 'pos';
+    // Resetear al tema oscuro por defecto
+    activeTheme = 'dark';
+    applyUiTheme('dark');
+  }
+
+  function toggleTheme() {
+    if (!currentUser) return;
+    const next: AppTheme = activeTheme === 'dark' ? 'light-modern' : 'dark';
+    activeTheme = next;
+    applyUiTheme(next);
+    saveUserTheme(currentUser.id, next);
   }
 
   // Group items by section
@@ -183,6 +190,14 @@
         onclick={handleLogout}
       >
         🚪 Cerrar Sesión
+      </button>
+      <button
+        class="btn btn-ghost btn-sm"
+        style="width: 100%; margin-top: var(--space-xs); font-size: var(--font-size-xs); display: flex; align-items: center; justify-content: center; gap: 6px;"
+        onclick={toggleTheme}
+        title={activeTheme === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
+      >
+        {activeTheme === 'dark' ? '☀️ Tema Claro' : '🌙 Tema Oscuro'}
       </button>
       <button
         class="btn btn-ghost btn-sm"

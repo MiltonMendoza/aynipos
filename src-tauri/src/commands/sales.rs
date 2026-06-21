@@ -156,6 +156,8 @@ pub fn create_sale(db: State<'_, Database>, sale: CreateSale) -> Result<Sale, St
         cuf: None,
         siat_status: Some("pending".to_string()),
         created_at: None,
+        item_count: None,
+        first_product: None,
     })
 }
 
@@ -163,9 +165,33 @@ pub fn create_sale(db: State<'_, Database>, sale: CreateSale) -> Result<Sale, St
 pub fn get_sales(db: State<'_, Database>, date_from: Option<String>, date_to: Option<String>, status: Option<String>, user_id: Option<String>) -> Result<Vec<Sale>, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
-    let mut query = String::from(
-        "SELECT s.*, c.name as customer_name FROM sales s LEFT JOIN customers c ON s.customer_id = c.id WHERE 1=1"
-    );
+    let base_query = "SELECT \
+        s.id,               \
+        s.sale_number,      \
+        s.customer_id,      \
+        s.cash_register_id, \
+        s.subtotal,         \
+        s.tax_amount,       \
+        s.discount_amount,  \
+        s.total,            \
+        s.payment_method,   \
+        s.payment_details,  \
+        s.status,           \
+        s.cufd,             \
+        s.cuf,              \
+        s.siat_status,      \
+        s.notes,            \
+        s.created_at,       \
+        s.user_id,          \
+        c.name as customer_name, \
+        (SELECT COUNT(*) FROM sale_items si WHERE si.sale_id = s.id) as item_count, \
+        (SELECT si2.product_name FROM sale_items si2 WHERE si2.sale_id = s.id ORDER BY si2.rowid LIMIT 1) as first_product \
+        FROM sales s LEFT JOIN customers c ON s.customer_id = c.id WHERE 1=1";
+    //   ^0              ^1              ^2             ^3              ^4
+    //   ^5              ^6              ^7             ^8              ^9
+    //   ^10  ^11   ^12  ^13     ^14   ^15  ^16         ^17             ^18           ^19
+
+    let mut query = String::from(base_query);
     let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
     let mut idx = 1;
 
@@ -188,9 +214,10 @@ pub fn get_sales(db: State<'_, Database>, date_from: Option<String>, date_to: Op
     }
 
     if let Some(ref uid) = user_id {
-        query.push_str(&format!(" AND (s.user_id = ?{} OR s.user_id IS NULL)", idx));
+        // Filtro estricto: solo las ventas de este usuario (sin incluir las que no tienen usuario)
+        query.push_str(&format!(" AND s.user_id = ?{}", idx));
         params.push(Box::new(uid.clone()));
-        let _ = idx; // last param
+        let _ = idx;
     }
 
     query.push_str(" ORDER BY s.created_at DESC");
@@ -200,23 +227,25 @@ pub fn get_sales(db: State<'_, Database>, date_from: Option<String>, date_to: Op
 
     let rows = stmt.query_map(param_refs.as_slice(), |row| {
         Ok(Sale {
-            id: row.get(0)?,
-            sale_number: row.get(1)?,
-            customer_id: row.get(2)?,
-            customer_name: row.get(17)?,
-            cash_register_id: row.get(3)?,
-            subtotal: row.get(4)?,
-            tax_amount: row.get(5)?,
-            discount_amount: row.get(6)?,
-            total: row.get(7)?,
-            payment_method: row.get(8)?,
-            payment_details: row.get(9)?,
-            notes: row.get(16)?,
-            status: row.get(10)?,
-            cufd: row.get(11)?,
-            cuf: row.get(12)?,
-            siat_status: row.get(13)?,
-            created_at: row.get(15)?,
+            id:               row.get(0)?,   // s.id
+            sale_number:      row.get(1)?,   // s.sale_number
+            customer_id:      row.get(2)?,   // s.customer_id
+            cash_register_id: row.get(3)?,   // s.cash_register_id
+            subtotal:         row.get(4)?,   // s.subtotal
+            tax_amount:       row.get(5)?,   // s.tax_amount
+            discount_amount:  row.get(6)?,   // s.discount_amount
+            total:            row.get(7)?,   // s.total
+            payment_method:   row.get(8)?,   // s.payment_method
+            payment_details:  row.get(9)?,   // s.payment_details
+            status:           row.get(10)?,  // s.status
+            cufd:             row.get(11)?,  // s.cufd
+            cuf:              row.get(12)?,  // s.cuf
+            siat_status:      row.get(13)?,  // s.siat_status
+            notes:            row.get(14)?,  // s.notes
+            created_at:       row.get(15)?,  // s.created_at
+            customer_name:    row.get(17)?,  // c.name
+            item_count:       row.get(18)?,  // count(sale_items)
+            first_product:    row.get(19)?,  // primer producto
         })
     }).map_err(|e| e.to_string())?;
 

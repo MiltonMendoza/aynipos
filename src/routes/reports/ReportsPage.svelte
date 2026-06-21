@@ -69,7 +69,9 @@
   async function loadCashHistory() {
     cashHistoryLoading = true;
     try {
-      cashHistory = await getCashRegisterHistory(cashFilterUser || undefined, cashHistoryLimit);
+      // Cajero: siempre filtrar por su propio ID
+      const filterUid = currentUser?.role === 'cashier' ? currentUser.id : (cashFilterUser || undefined);
+      cashHistory = await getCashRegisterHistory(filterUid, cashHistoryLimit);
     } catch { cashHistory = []; }
     cashHistoryLoading = false;
   }
@@ -182,7 +184,9 @@
     topLoading = true;
     try {
       const { from, to } = getDateRange(selectedPeriod, customFrom, customTo);
-      topProducts = await getTopSellingProducts(from, to, topLimit);
+      // Cajero: solo sus propias ventas
+      const uid = currentUser?.role === 'cashier' ? currentUser.id : undefined;
+      topProducts = await getTopSellingProducts(from, to, topLimit, uid);
     } catch { topProducts = []; }
     topLoading = false;
   }
@@ -191,7 +195,9 @@
     chartLoading = true;
     try {
       const { from, to } = getDateRange(chartPeriod, chartCustomFrom, chartCustomTo);
-      chartData = await getSalesChartData(from, to, chartGroupBy);
+      // Cajero: solo sus propias ventas
+      const uid = currentUser?.role === 'cashier' ? currentUser.id : undefined;
+      chartData = await getSalesChartData(from, to, chartGroupBy, uid);
     } catch { chartData = []; }
     chartLoading = false;
   }
@@ -402,9 +408,14 @@
 
   onMount(async () => {
     try {
-      stats = await getDashboardStats();
-      recentSales = (await getSales()).slice(0, 10);
-      cashUsers = await getUsers();
+      // Cajero: filtra sus propias estadísticas de ventas del día
+      const uid = currentUser?.role === 'cashier' ? currentUser.id : undefined;
+      stats = await getDashboardStats(uid);
+      // Cajero: solo ve sus propias ventas recientes
+      recentSales = (await getSales(undefined, undefined, undefined, uid)).slice(0, 10);
+      if (currentUser?.role !== 'cashier') {
+        cashUsers = await getUsers();
+      }
       await loadCashHistory();
       loadInventoryChartData();
     } catch {}
@@ -750,11 +761,12 @@
     </div>
   </div>
 
-  <div class="card-grid" style="grid-template-columns: repeat(5, 1fr); margin-bottom: var(--space-2xl);">
+  <div class="card-grid" style="grid-template-columns: repeat({hasPermission(currentUser, 'view_reports_inventory') ? 5 : 4}, 1fr); margin-bottom: var(--space-2xl);">
     <div class="stat-card"><div class="stat-icon green">💰</div><div class="stat-content"><div class="stat-value">{fmt(stats.total_sales_today)}</div><div class="stat-label">Ventas hoy</div></div></div>
     <div class="stat-card"><div class="stat-icon blue">🧾</div><div class="stat-content"><div class="stat-value">{stats.total_transactions_today}</div><div class="stat-label">Transacciones</div></div></div>
     <div class="stat-card"><div class="stat-icon yellow">⚠️</div><div class="stat-content"><div class="stat-value">{stats.low_stock_count}</div><div class="stat-label">Bajo stock</div></div></div>
     <div class="stat-card"><div class="stat-icon red">⏰</div><div class="stat-content"><div class="stat-value">{stats.expiring_soon_count}</div><div class="stat-label">Por vencer</div></div></div>
+    {#if hasPermission(currentUser, 'view_reports_inventory')}
     <div class="stat-card" style="border-color: color-mix(in srgb, var(--accent-success) 35%, transparent);">
       <div class="stat-icon green">🏦</div>
       <div class="stat-content">
@@ -762,13 +774,14 @@
         <div class="stat-label">Capital en inventario</div>
       </div>
     </div>
+    {/if}
   </div>
 
   <!-- ─── Sales Chart ──────────────────────────────────── -->
   {#if hasPermission(currentUser, 'view_reports_sales')}
   <div class="card" style="margin-bottom: var(--space-2xl);">
     <div class="top-header">
-      <h3 style="font-weight: 700;">📈 Gráfico de ventas</h3>
+      <h3 style="font-weight: 700;">📈 Gráfico de ventas{currentUser?.role === 'cashier' ? ' (mis ventas)' : ''}</h3>
       <div class="top-controls">
         <div class="btn-group">
           <button class="btn btn-sm {chartGroupBy === 'day' ? 'btn-primary' : 'btn-ghost'}" onclick={() => chartGroupBy = 'day'}>Diario</button>
@@ -935,7 +948,7 @@
   <!-- ─── Top Selling Products ──────────────────────────── -->
   <div class="card" style="margin-bottom: var(--space-2xl);">
     <div class="top-header">
-      <h3 style="font-weight: 700;">🏆 Productos más vendidos</h3>
+      <h3 style="font-weight: 700;">🏆 Productos más vendidos{currentUser?.role === 'cashier' ? ' (mis ventas)' : ''}</h3>
       <div class="top-controls">
         <div class="btn-group">
           <button class="btn btn-sm {sortBy === 'quantity' ? 'btn-primary' : 'btn-ghost'}" onclick={() => sortBy = 'quantity'}>Por cantidad</button>
@@ -1271,8 +1284,9 @@
   {#if hasPermission(currentUser, 'view_reports_sales')}
   <div class="card" style="margin-bottom: var(--space-2xl);">
     <div class="top-header">
-      <h3 style="font-weight: 700;">📋 Historial de Cajas</h3>
+      <h3 style="font-weight: 700;">📋 Historial de Cajas{currentUser?.role === 'cashier' ? ' (mis sesiones)' : ''}</h3>
       <div class="top-controls">
+        {#if currentUser?.role !== 'cashier'}
         <div style="display: flex; align-items: center; gap: var(--space-sm);">
           <label style="font-size: var(--font-size-xs); color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Cajero:</label>
           <select class="select select-sm" style="width: 160px;" bind:value={cashFilterUser} onchange={loadCashHistory}>
@@ -1282,6 +1296,7 @@
             {/each}
           </select>
         </div>
+        {/if}
         <button class="btn btn-ghost btn-sm" onclick={loadCashHistory}>{cashHistoryLoading ? '⏳...' : '🔄 Actualizar'}</button>
       </div>
     </div>
@@ -1347,20 +1362,65 @@
 
   {#if hasPermission(currentUser, 'view_reports_sales')}
   <div class="card">
-    <h3 style="font-weight: 700; margin-bottom: var(--space-lg);">Últimas Ventas</h3>
+    <h3 style="font-weight: 700; margin-bottom: var(--space-lg);">Últimas Ventas{currentUser?.role === 'cashier' ? ' (mis ventas)' : ''}</h3>
     <div class="table-container" style="border: none;">
       <table>
-        <thead><tr><th>#</th><th>Total</th><th>Método</th><th>Estado</th></tr></thead>
+        <thead><tr>
+          <th>#</th>
+          <th>Fecha</th>
+          <th>Cliente</th>
+          <th>Producto(s)</th>
+          <th class="text-right">Descuento</th>
+          <th class="text-right">Total</th>
+          <th>Pago</th>
+          <th>Estado</th>
+        </tr></thead>
         <tbody>
           {#each recentSales as s}
             <tr>
-              <td style="font-weight: 700;">#{s.sale_number}</td>
-              <td style="font-weight: 700; color: var(--accent-success);">{fmt(s.total)}</td>
-              <td>{s.payment_method}</td>
-              <td><span class="badge {s.status === 'completed' ? 'badge-success' : 'badge-danger'}">{s.status === 'completed' ? 'OK' : 'Anulada'}</span></td>
+              <td style="font-weight: 700; color: var(--text-muted);">#{s.sale_number}</td>
+              <td class="text-sm" style="white-space: nowrap; color: var(--text-muted);">
+                {s.created_at ? new Date(s.created_at).toLocaleString('es-BO', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—'}
+              </td>
+              <td class="text-sm">
+                {#if s.customer_name}
+                  <span style="font-weight: 600;">👤 {s.customer_name}</span>
+                {:else}
+                  <span style="color: var(--text-muted);">Sin cliente</span>
+                {/if}
+              </td>
+              <td class="text-sm" style="max-width: 200px;">
+                {#if s.first_product}
+                  <span style="font-weight: 500;">{s.first_product}</span>
+                  {#if s.item_count && s.item_count > 1}
+                    <span class="badge badge-info" style="margin-left: 4px; font-size: 0.65em;">+{s.item_count - 1} más</span>
+                  {/if}
+                {:else}
+                  <span style="color: var(--text-muted);">—</span>
+                {/if}
+              </td>
+              <td class="text-right text-sm">
+                {#if s.discount_amount > 0}
+                  <span style="color: var(--accent-warning);">-{fmt(s.discount_amount)}</span>
+                {:else}
+                  <span style="color: var(--text-muted);">—</span>
+                {/if}
+              </td>
+              <td style="font-weight: 700; color: var(--accent-success); white-space: nowrap;">{fmt(s.total)}</td>
+              <td class="text-sm">
+                {#if s.payment_method === 'efectivo'}💵 Efectivo
+                {:else if s.payment_method === 'tarjeta'}💳 Tarjeta
+                {:else if s.payment_method === 'qr'}📱 QR
+                {:else}{s.payment_method}{/if}
+              </td>
+              <td>
+                <span class="badge {s.status === 'completed' ? 'badge-success' : 'badge-danger'}">
+                  {s.status === 'completed' ? '✓ OK' : '✗ Anulada'}
+                </span>
+              </td>
             </tr>
           {:else}
-            <tr><td colspan="4" class="text-center text-muted">Sin ventas</td></tr>
+            <tr><td colspan="8" class="text-center text-muted">Sin ventas</td></tr>
           {/each}
         </tbody>
       </table>
