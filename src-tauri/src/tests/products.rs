@@ -19,6 +19,8 @@ mod tests {
             unit: Some("unidad".to_string()),
             min_stock: Some(0),
             metadata: None,
+            supplier_id: None,
+            dose: None,
         }
     }
 
