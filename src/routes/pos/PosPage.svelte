@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { ProductWithStock, CartItem, Customer, CreateCustomer, Sale, SaleItem, User } from '$lib/types';
-  import { getProducts, getProductByBarcode, createSale, getSaleItems, getCurrentCashRegister, getDashboardStats, getCustomers, createCustomer, getSettings, logAction } from '$lib/services/api';
+  import { getProducts, getProductByBarcode, createSale, getSaleItems, cancelSale, getCurrentCashRegister, getDashboardStats, getCustomers, createCustomer, getSettings, logAction } from '$lib/services/api';
   import { DataTableState } from '$lib/utils/datatable.svelte';
   import TablePagination from '$lib/components/TablePagination.svelte';
 
@@ -14,7 +14,12 @@
   let posTable = new DataTableState<ProductWithStock>([], [
     'product.sku',
     'product.name',
-    'category_name'
+    'product.dose',
+    'category_name',
+    'supplier_name',
+    'product.sale_price',
+    'current_stock',
+    'nearest_expiry_date'
   ]);
 
   function viewModeKey() {
@@ -53,11 +58,12 @@
   let cart: CartItem[] = $state([]);
   let searchQuery = $state('');
   let cashRegisterOpen = $state(false);
-  let showPaymentModal = $state(false);
-  let paymentMethod = $state('efectivo');
   let cashReceived = $state(0);
-  let toast = $state({ show: false, message: '', type: 'success' as 'success' | 'error' | 'warning' });
-  let paymentErrors: Record<string, string> = $state({});
+  let toast = $state({ show: false, message: '', type: 'success' as 'success' | 'error' | 'warning', undoSaleId: null as string | null });
+  let toastTimer: ReturnType<typeof setTimeout> | null = null;
+  let undoProgress = $state(0); // 0-100, drives the progress bar
+  let undoProgressTimer: ReturnType<typeof setInterval> | null = null;
+  let savedCart: CartItem[] = []; // snapshot for undo
   let searchInputRef: HTMLInputElement | undefined = $state(undefined);
   let f4PendingConfirm = $state(false);
 
@@ -93,7 +99,6 @@
   let stats = $state({ total_sales_today: 0, total_transactions_today: 0, total_products: 0, low_stock_count: 0, expiring_soon_count: 0, total_capital: 0 });
 
   // Feedback animations
-  let showSuccessOverlay = $state(false);
   let lastSaleTotal = $state(0);
   let animatingCartItems: Set<string> = $state(new Set());
 
@@ -248,9 +253,8 @@
     const tag = (e.target as HTMLElement)?.tagName;
     const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 
-    // Escape — close any open modal
+    // Escape — close any open modal/panel
     if (e.key === 'Escape') {
-      if (showPaymentModal) { showPaymentModal = false; e.preventDefault(); }
       return;
     }
 
@@ -262,10 +266,10 @@
       return;
     }
 
-    // F2 — open payment / cobrar
+    // F2 — cobro rápido con efectivo
     if (e.key === 'F2') {
       e.preventDefault();
-      openPayment();
+      completeSale('efectivo');
       return;
     }
 
@@ -273,13 +277,6 @@
     if (e.key === 'F3') {
       e.preventDefault();
       toggleCustomerSearch();
-      return;
-    }
-
-    // Enter — confirm sale when payment modal is open
-    if (e.key === 'Enter' && showPaymentModal) {
-      e.preventDefault();
-      completeSale();
       return;
     }
 
@@ -450,11 +447,7 @@
     return cart.reduce((sum, item) => sum + item.discount, 0);
   }
 
-  function change(): number {
-    return Math.max(0, cashReceived - cartTotal());
-  }
-
-  function openPayment() {
+  async function completeSale(method: string) {
     if (cart.length === 0) return;
 
     // Validate: cash register must be open
@@ -463,22 +456,6 @@
       return;
     }
 
-    cashReceived = cartTotal();
-    paymentErrors = {};
-    showPaymentModal = true;
-  }
-
-  function validatePayment(): boolean {
-    const e: Record<string, string> = {};
-    if (paymentMethod === 'efectivo' && cashReceived < cartTotal()) {
-      e.cash = 'El monto recibido es menor al total';
-    }
-    paymentErrors = e;
-    return Object.keys(e).length === 0;
-  }
-
-  async function completeSale() {
-    if (!validatePayment()) return;
     const gd = computedGlobalDiscount();
     try {
       const saleTotal = cartTotal();
@@ -489,7 +466,7 @@
           quantity: c.quantity,
           discount: c.discount > 0 ? c.discount : undefined,
         })),
-        payment_method: paymentMethod,
+        payment_method: method,
         discount_amount: gd > 0 ? gd : undefined,
         notes: saleNotes.trim() || undefined,
         user_id: currentUser?.id,
@@ -504,29 +481,21 @@
         logAction(currentUser.id, currentUser.name, 'sale_created', 'sale', completedSale.id, `Venta #${completedSale.sale_number} por Bs ${saleTotal.toFixed(2)}`);
       }
 
-      // Success feedback
+      // Success feedback — save cart snapshot for undo BEFORE clearing
+      const cartSnapshot = [...cart.map(c => ({ ...c }))];
+      const saleNotesSnapshot = saleNotes;
+
       lastSaleTotal = saleTotal;
       playSuccessSound();
-      showPaymentModal = false;
-      showSuccessOverlay = true;
-
       clearCart();
       stats = await getDashboardStats();
       await loadProducts(searchQuery);
       refocusSearch();
+
+      showSaleToast(`✅ Venta registrada · ${formatCurrency(saleTotal)}`, completedSale.id, cartSnapshot, saleNotesSnapshot);
     } catch (e) {
       showToast(`❌ Error: ${e}`, 'error');
     }
-  }
-
-  function handlePrintReceipt() {
-    if (lastCompletedSale && lastCompletedSaleItems.length > 0) {
-      printReceipt(lastCompletedSale, lastCompletedSaleItems, businessInfo);
-    }
-  }
-
-  function dismissSuccessOverlay() {
-    showSuccessOverlay = false;
   }
 
   function clearCart() {
@@ -542,10 +511,54 @@
     showNotes = false;
   }
 
+  function clearToastTimers() {
+    if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
+    if (undoProgressTimer) { clearInterval(undoProgressTimer); undoProgressTimer = null; }
+  }
+
   function showToast(message: string, type: 'success' | 'error' | 'warning') {
-    toast = { show: true, message, type };
+    clearToastTimers();
+    toast = { show: true, message, type, undoSaleId: null };
     if (type === 'error') playErrorSound();
-    setTimeout(() => { toast.show = false; }, 3000);
+    toastTimer = setTimeout(() => { toast.show = false; }, 3000);
+  }
+
+  const UNDO_DURATION = 10000; // ms
+
+  function showSaleToast(message: string, saleId: string, cartSnapshot: CartItem[], notesSnapshot: string) {
+    clearToastTimers();
+    savedCart = cartSnapshot;
+    undoProgress = 100;
+    toast = { show: true, message, type: 'success', undoSaleId: saleId };
+
+    const step = 100 / (UNDO_DURATION / 50);
+    undoProgressTimer = setInterval(() => {
+      undoProgress = Math.max(0, undoProgress - step);
+      if (undoProgress <= 0) { clearToastTimers(); }
+    }, 50);
+
+    toastTimer = setTimeout(() => {
+      toast.show = false;
+      savedCart = [];
+    }, UNDO_DURATION);
+  }
+
+  async function undoLastSale() {
+    const saleId = toast.undoSaleId;
+    if (!saleId) return;
+    clearToastTimers();
+    toast.show = false;
+    try {
+      await cancelSale(saleId);
+      // Restore cart
+      cart = savedCart;
+      savedCart = [];
+      stats = await getDashboardStats();
+      await loadProducts(searchQuery);
+      showToast('↩ Venta deshecha correctamente', 'warning');
+    } catch (e) {
+      showToast(`❌ No se pudo deshacer: ${e}`, 'error');
+    }
   }
 
   function formatCurrency(amount: number): string {
@@ -640,6 +653,8 @@
           <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--space-md);">
             {#each products as ps}
               {@const style = getCardStyle(ps)}
+              {@const noStock = ps.current_stock <= 0}
+              {@const lowStock = !noStock && ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0}
               <button
                 class="product-card"
                 onclick={() => addToCart(ps)}
@@ -662,33 +677,53 @@
                 onmouseenter={(e) => { if (ps.current_stock > 0) { (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-primary)'; (e.currentTarget as HTMLElement).style.background = style.hoverBg; (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLElement).style.boxShadow = 'var(--shadow-glow-blue)'; }}}
                 onmouseleave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = style.border; (e.currentTarget as HTMLElement).style.background = style.bg; (e.currentTarget as HTMLElement).style.transform = 'none'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
               >
-                <div class="flex items-center justify-between">
+                <!-- Fila 1: SKU + badge Proveedor -->
+                <div class="flex items-center justify-between" style="gap: var(--space-xs); flex-wrap: wrap;">
                   <span class="text-xs text-muted">{ps.product.sku}</span>
-                  <div class="flex gap-xs">
-                    {#if ps.expiry_status === 'expired'}
-                      <span class="badge badge-danger">Vencido</span>
-                    {:else if ps.expiry_status === 'expiring'}
-                      <span class="badge badge-warning">Por vencer</span>
-                    {/if}
-                    {#if ps.current_stock <= 0}
-                      <span class="badge badge-danger">Sin stock</span>
-                    {:else if ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0}
-                      <span class="badge badge-danger">Bajo</span>
-                    {/if}
-                  </div>
+                  {#if ps.supplier_name}
+                    <span class="badge" style="font-size: var(--font-size-xs); background: var(--bg-tertiary); color: var(--text-muted); border: 1px solid var(--border-color);">{ps.supplier_name}</span>
+                  {/if}
                 </div>
+                <!-- Nombre -->
                 <div style="font-weight: 600; font-size: var(--font-size-base); line-height: 1.3;" class="truncate">
                   {ps.product.name}
                 </div>
-                {#if ps.category_name}
-                  <div class="text-xs text-muted">{ps.category_name}</div>
+                <!-- Dosis -->
+                {#if ps.product.dose}
+                  <div><span class="badge badge-info" style="font-size: var(--font-size-xs);">{ps.product.dose}</span></div>
                 {/if}
+                <!-- Categoría -->
+                {#if ps.category_name}
+                  <div class="text-xs text-muted truncate">{ps.category_name}</div>
+                {/if}
+                <!-- Vencimiento — chip con color según estado -->
+                {#if ps.nearest_expiry_date}
+                  {@const isExpired = ps.expiry_status === 'expired'}
+                  {@const isExpiring = ps.expiry_status === 'expiring'}
+                  <div style="
+                    display: inline-flex; align-items: center; gap: 4px;
+                    font-size: var(--font-size-xs); font-weight: 600;
+                    padding: 2px 8px; border-radius: 999px;
+                    background: {isExpired ? 'var(--accent-danger-glow)' : isExpiring ? 'var(--accent-warning-glow)' : 'var(--bg-tertiary)'};
+                    color: {isExpired ? 'var(--accent-danger)' : isExpiring ? 'var(--accent-warning)' : 'var(--text-muted)'};
+                    align-self: flex-start;
+                  ">
+                    {isExpired ? '⛔' : isExpiring ? '⚠️' : '📅'}
+                    Vence: {new Date(ps.nearest_expiry_date + 'T12:00:00').toLocaleDateString('es-BO', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </div>
+                {/if}
+                <!-- Footer: Precio + Stock chip -->
                 <div class="flex items-center justify-between" style="margin-top: auto;">
                   <span style="font-weight: 800; color: var(--accent-primary); font-size: var(--font-size-md);">
                     {formatCurrency(ps.product.sale_price)}
                   </span>
-                  <span class="text-xs" style="color: {ps.current_stock <= 0 ? 'var(--accent-danger)' : 'var(--text-muted)'};">
-                    Stock: {ps.current_stock}
+                  <span style="
+                    font-size: var(--font-size-xs); font-weight: 600;
+                    padding: 2px 8px; border-radius: 999px;
+                    background: {noStock ? 'var(--accent-danger-glow)' : lowStock ? 'var(--accent-warning-glow)' : 'var(--bg-tertiary)'};
+                    color: {noStock ? 'var(--accent-danger)' : lowStock ? 'var(--accent-warning)' : 'var(--text-muted)'};
+                  ">
+                    {noStock ? '⛔' : lowStock ? '⚠️' : '📦'} Stock: {ps.current_stock}
                   </span>
                 </div>
               </button>
@@ -701,63 +736,71 @@
                 <thead>
                   <tr>
                     <th onclick={() => posTable.sortBy('product.sku')} style="cursor: pointer; user-select: none;">
-                      SKU {posTable.sortColumn === 'product.sku' ? (posTable.sortDirection === 'asc' ? '▲' : '▼') : ''}
+                      SKU {posTable.sortColumn === 'product.sku' ? (posTable.sortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th onclick={() => posTable.sortBy('product.name')} style="cursor: pointer; user-select: none;">
-                      Producto {posTable.sortColumn === 'product.name' ? (posTable.sortDirection === 'asc' ? '▲' : '▼') : ''}
-                    </th>
-                    <th onclick={() => posTable.sortBy('category_name')} style="cursor: pointer; user-select: none;">
-                      Categoría {posTable.sortColumn === 'category_name' ? (posTable.sortDirection === 'asc' ? '▲' : '▼') : ''}
+                      Producto {posTable.sortColumn === 'product.name' ? (posTable.sortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th onclick={() => posTable.sortBy('product.dose')} style="cursor: pointer; user-select: none;">
-                      Dosis {posTable.sortColumn === 'product.dose' ? (posTable.sortDirection === 'asc' ? '▲' : '▼') : ''}
+                      Dosis {posTable.sortColumn === 'product.dose' ? (posTable.sortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th onclick={() => posTable.sortBy('category_name')} style="cursor: pointer; user-select: none;">
+                      Categoría {posTable.sortColumn === 'category_name' ? (posTable.sortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th onclick={() => posTable.sortBy('supplier_name')} style="cursor: pointer; user-select: none;">
+                      Proveedor {posTable.sortColumn === 'supplier_name' ? (posTable.sortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th onclick={() => posTable.sortBy('product.sale_price')} style="cursor: pointer; user-select: none;">
-                      Precio {posTable.sortColumn === 'product.sale_price' ? (posTable.sortDirection === 'asc' ? '▲' : '▼') : ''}
+                      Precio {posTable.sortColumn === 'product.sale_price' ? (posTable.sortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th onclick={() => posTable.sortBy('current_stock')} style="cursor: pointer; user-select: none;">
-                      Stock {posTable.sortColumn === 'current_stock' ? (posTable.sortDirection === 'asc' ? '▲' : '▼') : ''}
+                      Stock {posTable.sortColumn === 'current_stock' ? (posTable.sortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th onclick={() => posTable.sortBy('nearest_expiry_date')} style="cursor: pointer; user-select: none;">
-                      Vencimiento {posTable.sortColumn === 'nearest_expiry_date' ? (posTable.sortDirection === 'asc' ? '▲' : '▼') : ''}
+                      Vencimiento {posTable.sortColumn === 'nearest_expiry_date' ? (posTable.sortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {#each posTable.paginated as ps}
-                    <tr
-                      class:row-expired={ps.expiry_status === 'expired'}
-                      class:row-low-stock={ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0}
-                      class:row-expiring={ps.expiry_status === 'expiring' && !(ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0)}
-                      style="cursor: {ps.current_stock <= 0 ? 'not-allowed' : 'pointer'}; opacity: {ps.current_stock <= 0 ? '0.5' : '1'};"
-                      onclick={() => { if (ps.current_stock > 0) addToCart(ps); }}
-                    >
-                      <td class="font-mono text-sm">{ps.product.sku}</td>
-                      <td style="font-weight: 600;">{ps.product.name}</td>
-                      <td class="text-muted">{ps.category_name || '—'}</td>
-                      <td class="text-muted">
-                        {#if ps.product.dose}
-                          <span class="badge badge-info" style="font-size: var(--font-size-xs);">{ps.product.dose}</span>
-                        {:else}—{/if}
-                      </td>
-                      <td style="font-weight: 600; color: var(--accent-primary);">{formatCurrency(ps.product.sale_price)}</td>
-                      <td style="font-weight: 700;">
-                        {ps.current_stock}
-                        {#if ps.product.min_stock > 0}
-                          <span style="font-weight: 400; font-size: var(--font-size-xs); color: var(--text-muted); margin-left: 2px;">
-                            (Min: {ps.product.min_stock})
-                          </span>
-                        {/if}
-                      </td>
-                      <td style="font-weight: 500;">
-                        {#if ps.nearest_expiry_date}
-                          {new Date(ps.nearest_expiry_date + 'T12:00:00').toLocaleDateString('es-BO', { day: '2-digit', month: 'short', year: 'numeric' })}
-                        {:else}
-                          —
-                        {/if}
-                      </td>
-                    </tr>
-                  {/each}
+                  {#if posTable.paginated.length === 0}
+                    <tr><td colspan="9" class="text-center text-muted" style="padding: var(--space-3xl);">Sin productos</td></tr>
+                  {:else}
+                    {#each posTable.paginated as ps}
+                      <tr
+                        class:row-expired={ps.expiry_status === 'expired'}
+                        class:row-low-stock={ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0}
+                        class:row-expiring={ps.expiry_status === 'expiring' && !(ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0)}
+                        style="cursor: {ps.current_stock <= 0 ? 'not-allowed' : 'pointer'}; opacity: {ps.current_stock <= 0 ? '0.5' : '1'};"
+                        onclick={() => { if (ps.current_stock > 0) addToCart(ps); }}
+                      >
+                        <td class="font-mono text-sm">{ps.product.sku}</td>
+                        <td style="font-weight: 600;">{ps.product.name}</td>
+                        <td class="text-muted">
+                          {#if ps.product.dose}
+                            <span class="badge badge-info" style="font-size: var(--font-size-xs);">{ps.product.dose}</span>
+                          {:else}—{/if}
+                        </td>
+                        <td class="text-muted">{ps.category_name || '—'}</td>
+                        <td class="text-muted">{ps.supplier_name || '—'}</td>
+                        <td style="font-weight: 600; color: var(--accent-primary);">{formatCurrency(ps.product.sale_price)}</td>
+                        <td style="font-weight: 700;">
+                          {ps.current_stock}
+                          {#if ps.product.min_stock > 0}
+                            <span style="font-weight: 400; font-size: var(--font-size-xs); color: var(--text-muted); margin-left: 2px;">
+                              (Min: {ps.product.min_stock})
+                            </span>
+                          {/if}
+                        </td>
+                        <td style="font-weight: 500;">
+                          {#if ps.nearest_expiry_date}
+                            {new Date(ps.nearest_expiry_date + 'T12:00:00').toLocaleDateString('es-BO', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          {:else}
+                            —
+                          {/if}
+                        </td>
+                      </tr>
+                    {/each}
+                  {/if}
                 </tbody>
               </table>
             </div>
@@ -1030,20 +1073,20 @@
                 <div class="flex items-center gap-sm">
                   <button
                     class="btn btn-ghost btn-sm"
-                    style="width: 28px; height: 28px; padding: 0;"
+                    style="width: 34px; height: 34px; padding: 0; font-size: 1.1rem;"
                     onclick={() => updateQuantity(index, item.quantity - 1)}
                   >−</button>
                   <input
                     type="number"
                     class="input"
-                    style="width: 50px; text-align: center; padding: var(--space-xs) var(--space-sm); font-weight: 700;"
+                    style="width: 72px; height: 34px; text-align: center; padding: var(--space-xs) var(--space-sm); font-weight: 700; font-size: var(--font-size-lg);"
                     value={item.quantity}
                     onchange={(e) => updateQuantity(index, parseFloat((e.target as HTMLInputElement).value) || 1)}
                     min="1"
                   />
                   <button
                     class="btn btn-ghost btn-sm"
-                    style="width: 28px; height: 28px; padding: 0;"
+                    style="width: 34px; height: 34px; padding: 0; font-size: 1.1rem;"
                     onclick={() => updateQuantity(index, item.quantity + 1)}
                   >+</button>
                 </div>
@@ -1197,176 +1240,35 @@
         </div>
       </div>
 
-      <button
-        class="btn btn-success btn-xl btn-block"
-        onclick={openPayment}
-        disabled={cart.length === 0}
-        style="position: relative; overflow: hidden;"
-      >
-        💰 Cobrar {formatCurrency(cartTotal())} (F2)
-      </button>
+      <div style="display: grid; gap: var(--space-sm);">
+        <div style="text-align: center; font-size: var(--font-size-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); font-weight: 600; margin-bottom: var(--space-xs);">Cobrar con</div>
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: var(--space-sm);">
+          <button
+            class="btn btn-success"
+            onclick={() => completeSale('efectivo')}
+            disabled={cart.length === 0}
+            style="flex-direction: column; gap: 2px; padding: var(--space-sm) 0; font-size: var(--font-size-sm); font-weight: 700;"
+          >
+            <span style="font-size: 1.3rem;">💵</span>
+            <span>Efectivo</span>
+            <span style="font-size: var(--font-size-xs); opacity: 0.8; font-weight: 400;">(F2)</span>
+          </button>
+          <button
+            class="btn"
+            onclick={() => completeSale('qr')}
+            disabled={cart.length === 0}
+            style="flex-direction: column; gap: 2px; padding: var(--space-sm) 0; font-size: var(--font-size-sm); font-weight: 700; background: var(--bg-elevated); border: 1px solid var(--border-color);"
+          >
+            <span style="font-size: 1.3rem;">📱</span>
+            <span>QR</span>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- Payment Modal -->
-{#if showPaymentModal}
-  <div class="modal-overlay" onclick={() => showPaymentModal = false}>
-    <div class="modal" onclick={(e) => e.stopPropagation()}>
-      <div class="modal-header">
-        <h3 class="modal-title">💳 Método de Pago</h3>
-        <button class="btn btn-ghost btn-sm" onclick={() => showPaymentModal = false}>✕</button>
-      </div>
 
-      <div class="modal-body">
-        <div style="display: flex; gap: var(--space-md);">
-          {#each [
-            { value: 'efectivo', icon: '💵', label: 'Efectivo' },
-            { value: 'tarjeta', icon: '💳', label: 'Tarjeta' },
-            { value: 'qr', icon: '📱', label: 'QR' }
-          ] as method}
-            <button
-              class="btn"
-              class:btn-primary={paymentMethod === method.value}
-              class:btn-ghost={paymentMethod !== method.value}
-              style="flex: 1; flex-direction: column; padding: var(--space-lg); gap: var(--space-sm);"
-              onclick={() => { paymentMethod = method.value; paymentErrors = {}; }}
-            >
-              <span style="font-size: 1.5rem;">{method.icon}</span>
-              <span>{method.label}</span>
-            </button>
-          {/each}
-        </div>
-
-        <!-- Customer info -->
-        <div style="
-          display: flex;
-          align-items: center;
-          gap: var(--space-sm);
-          padding: var(--space-sm) var(--space-md);
-          background: var(--bg-elevated);
-          border-radius: var(--radius-md);
-          font-size: var(--font-size-sm);
-        ">
-          <span>👤</span>
-          <span style="font-weight: 600;">{selectedCustomer ? selectedCustomer.name : 'Sin Nombre'}</span>
-          <span class="text-xs text-muted">NIT: {selectedCustomer?.nit || '0'}</span>
-        </div>
-
-        {#if saleNotes.trim()}
-          <div style="
-            display: flex;
-            align-items: flex-start;
-            gap: var(--space-sm);
-            padding: var(--space-sm) var(--space-md);
-            background: var(--bg-elevated);
-            border-radius: var(--radius-md);
-            font-size: var(--font-size-sm);
-          ">
-            <span>📝</span>
-            <span class="text-muted" style="word-break: break-word;">{saleNotes.trim()}</span>
-          </div>
-        {/if}
-
-        <div style="background: var(--bg-tertiary); border-radius: var(--radius-lg); padding: var(--space-xl); text-align: center;">
-          <div class="text-sm text-muted" style="margin-bottom: var(--space-sm);">Total a cobrar</div>
-          <div style="font-size: var(--font-size-3xl); font-weight: 800; color: var(--accent-success);">
-            {formatCurrency(cartTotal())}
-          </div>
-        </div>
-
-        {#if paymentMethod === 'efectivo'}
-          <div class="input-group">
-            <label class="input-label" for="cash-input">Efectivo recibido</label>
-            <input
-              id="cash-input"
-              class="input input-lg"
-              class:input-error={paymentErrors.cash}
-              type="number"
-              bind:value={cashReceived}
-              oninput={() => { if (paymentErrors.cash) paymentErrors = {}; }}
-              min={cartTotal()}
-              step="0.5"
-              style="font-size: var(--font-size-xl); font-weight: 700; text-align: center;"
-            />
-            {#if paymentErrors.cash}<span class="field-error">{paymentErrors.cash}</span>{/if}
-          </div>
-
-          {#if change() > 0}
-            <div style="background: var(--accent-success-glow); border-radius: var(--radius-lg); padding: var(--space-lg); text-align: center;">
-              <div class="text-sm" style="color: var(--accent-success); margin-bottom: var(--space-xs);">Cambio</div>
-              <div style="font-size: var(--font-size-2xl); font-weight: 800; color: var(--accent-success);">
-                {formatCurrency(change())}
-              </div>
-            </div>
-          {/if}
-        {/if}
-      </div>
-
-      <div class="modal-footer">
-        <button class="btn btn-ghost" onclick={() => showPaymentModal = false}>Cancelar</button>
-        <button
-          class="btn btn-success btn-lg"
-          onclick={completeSale}
-        >
-          ✅ Confirmar Venta (Enter)
-        </button>
-      </div>
-    </div>
-  </div>
-{/if}
-
-<!-- Success Overlay -->
-{#if showSuccessOverlay}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="success-overlay" onclick={dismissSuccessOverlay}>
-    <div class="success-check-wrapper">
-      <div class="success-ring"></div>
-      <div class="success-ring"></div>
-      <div class="success-ring"></div>
-      <div class="success-check-icon">✓</div>
-    </div>
-    <div class="success-text">Venta registrada correctamente</div>
-    <div class="success-amount">{formatCurrency(lastSaleTotal)}</div>
-    <div style="display: flex; gap: var(--space-md); margin-top: var(--space-xl);">
-      <button
-        class="btn btn-ghost"
-        style="
-          background: rgba(255,255,255,0.15);
-          color: #fff;
-          border: 1px solid rgba(255,255,255,0.3);
-          backdrop-filter: blur(8px);
-          padding: var(--space-md) var(--space-xl);
-          font-size: var(--font-size-md);
-          font-weight: 600;
-          border-radius: var(--radius-lg);
-          cursor: pointer;
-          transition: all 0.2s;
-        "
-        onclick={(e) => { e.stopPropagation(); handlePrintReceipt(); }}
-      >
-        🖨️ Imprimir Recibo
-      </button>
-      <button
-        class="btn btn-ghost"
-        style="
-          background: rgba(255,255,255,0.08);
-          color: rgba(255,255,255,0.7);
-          border: 1px solid rgba(255,255,255,0.15);
-          padding: var(--space-md) var(--space-lg);
-          font-size: var(--font-size-sm);
-          border-radius: var(--radius-lg);
-          cursor: pointer;
-          transition: all 0.2s;
-        "
-        onclick={(e) => { e.stopPropagation(); dismissSuccessOverlay(); }}
-      >
-        Cerrar
-      </button>
-    </div>
-  </div>
-{/if}
 
 <!-- Toast Notification -->
 {#if toast.show}
@@ -1374,8 +1276,39 @@
     class:toast-success={toast.type === 'success'}
     class:toast-error={toast.type === 'error'}
     class:toast-shake={toast.type === 'error'}
-    style={toast.type === 'warning' ? 'border-left: 3px solid var(--accent-warning);' : ''}
+    style={toast.type === 'warning' && !toast.undoSaleId ? 'border-left: 3px solid var(--accent-warning);' : ''}
   >
-    {toast.message}
+    <span style="flex: 1;">{toast.message}</span>
+    {#if toast.undoSaleId}
+      <button
+        onclick={undoLastSale}
+        style="
+          margin-left: var(--space-md);
+          padding: 4px 12px;
+          border-radius: var(--radius-sm);
+          border: 1px solid rgba(255,255,255,0.4);
+          background: rgba(255,255,255,0.15);
+          color: inherit;
+          font-size: var(--font-size-sm);
+          font-weight: 700;
+          cursor: pointer;
+          white-space: nowrap;
+          transition: background 0.15s;
+        "
+        onmouseenter={(e) => (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.28)'}
+        onmouseleave={(e) => (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.15)'}
+      >↩ Deshacer</button>
+      <!-- Progress bar -->
+      <div style="
+        position: absolute;
+        bottom: 0; left: 0;
+        height: 3px;
+        width: {undoProgress}%;
+        background: rgba(255,255,255,0.6);
+        border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+        transition: width 0.05s linear;
+      "></div>
+    {/if}
   </div>
 {/if}
+

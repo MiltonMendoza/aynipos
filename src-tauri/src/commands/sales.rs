@@ -158,6 +158,7 @@ pub fn create_sale(db: State<'_, Database>, sale: CreateSale) -> Result<Sale, St
         created_at: None,
         item_count: None,
         first_product: None,
+        user_name: None,
     })
 }
 
@@ -184,12 +185,16 @@ pub fn get_sales(db: State<'_, Database>, date_from: Option<String>, date_to: Op
         s.created_at,       \
         s.user_id,          \
         c.name as customer_name, \
+        u.name as user_name, \
         (SELECT COUNT(*) FROM sale_items si WHERE si.sale_id = s.id) as item_count, \
         (SELECT si2.product_name FROM sale_items si2 WHERE si2.sale_id = s.id ORDER BY si2.rowid LIMIT 1) as first_product \
-        FROM sales s LEFT JOIN customers c ON s.customer_id = c.id WHERE 1=1";
+        FROM sales s \
+        LEFT JOIN customers c ON s.customer_id = c.id \
+        LEFT JOIN users u ON s.user_id = u.id \
+        WHERE 1=1";
     //   ^0              ^1              ^2             ^3              ^4
     //   ^5              ^6              ^7             ^8              ^9
-    //   ^10  ^11   ^12  ^13     ^14   ^15  ^16         ^17             ^18           ^19
+    //   ^10  ^11   ^12  ^13     ^14   ^15  ^16         ^17             ^18         ^19           ^20
 
     let mut query = String::from(base_query);
     let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
@@ -244,8 +249,9 @@ pub fn get_sales(db: State<'_, Database>, date_from: Option<String>, date_to: Op
             notes:            row.get(14)?,  // s.notes
             created_at:       row.get(15)?,  // s.created_at
             customer_name:    row.get(17)?,  // c.name
-            item_count:       row.get(18)?,  // count(sale_items)
-            first_product:    row.get(19)?,  // primer producto
+            user_name:        row.get(18)?,  // u.name
+            item_count:       row.get(19)?,  // count(sale_items)
+            first_product:    row.get(20)?,  // primer producto
         })
     }).map_err(|e| e.to_string())?;
 

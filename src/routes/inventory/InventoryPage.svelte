@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { ProductWithStock, Category, CreateProduct, UpdateProduct, ImportResult, InventoryLot, InventoryMovement, User, Supplier } from '$lib/types';
-  import { getInventory, adjustInventory, getCategories, createProduct, createCategory, updateProduct, exportProductsCsv, importProductsCsv, getProductLots, deleteLot, getInventoryMovements, logAction, getSuppliers } from '$lib/services/api';
+  import { getInventory, adjustInventory, getCategories, createProduct, createCategory, updateProduct, exportProductsCsv, importProductsCsv, getProductLots, deleteLot, getInventoryMovements, logAction, getSuppliers, deleteProduct } from '$lib/services/api';
   import { DataTableState } from '$lib/utils/datatable.svelte';
   import TablePagination from '$lib/components/TablePagination.svelte';
 
@@ -29,11 +29,18 @@
   let showAddCategory = $state(false);
   let showAdjust = $state(false);
   let adjustProduct: ProductWithStock | null = $state(null);
-  let adjustQty = $state(0);
-  let adjustType = $state('purchase');
+  let adjustTargetStock = $state<number | null>(null);
+  let adjustType = $state('adjustment');
   let adjustNotes = $state('');
   let adjustLotNumber = $state('');
   let adjustExpiryDate = $state('');
+
+  // Delta reactivo: stock deseado - stock actual
+  let adjustDelta = $derived(
+    adjustTargetStock !== null && adjustProduct !== null
+      ? adjustTargetStock - (adjustProduct as ProductWithStock).current_stock
+      : 0
+  );
 
   // Edit product
   let showEditProduct = $state(false);
@@ -77,12 +84,59 @@
   // Dropdown de acciones por fila
   let openDropdownId = $state<string | null>(null);
 
-  function toggleDropdown(e: MouseEvent, id: string) {
-    e.stopPropagation();
-    openDropdownId = openDropdownId === id ? null : id;
+  // Archivar producto
+  let archiveToast = $state<{ name: string } | null>(null);
+  let archiveConfirm = $state<ProductWithStock | null>(null);
+  let archiving = $state(false);
+
+  async function handleArchiveProduct(ps: ProductWithStock) {
+    if (ps.current_stock > 0) {
+      archiveConfirm = ps;
+      return;
+    }
+    await doArchive(ps);
   }
 
-  onMount(loadInventory);
+  async function doArchive(ps: ProductWithStock) {
+    archiving = true;
+    try {
+      await deleteProduct(ps.product.id);
+      archiveConfirm = null;
+      archiveToast = { name: ps.product.name };
+      setTimeout(() => { archiveToast = null; }, 4000);
+      await loadInventory();
+    } catch (e) {
+      console.error('Error archivando producto:', e);
+    }
+    archiving = false;
+  }
+
+  // Posición y producto activo del dropdown (position:fixed, escapa del overflow de la tabla)
+  let dropdownPos = $state({ top: 0, left: 0 });
+  let dropdownActiveProduct = $state<ProductWithStock | null>(null);
+
+  function toggleDropdown(e: MouseEvent, ps: ProductWithStock) {
+    e.stopPropagation();
+    if (openDropdownId === ps.product.id) {
+      openDropdownId = null;
+      dropdownActiveProduct = null;
+      return;
+    }
+    // Captura la posición del botón ⋮ para anclar el menú con position:fixed
+    const btn = e.currentTarget as HTMLElement;
+    const rect = btn.getBoundingClientRect();
+    dropdownPos = { top: rect.bottom + 4, left: rect.left };
+    dropdownActiveProduct = ps; // guardamos referencia estable al producto
+    openDropdownId = ps.product.id;
+  }
+
+  onMount(() => {
+    loadInventory();
+    // Cerrar dropdown al hacer click fuera
+    const closeDropdown = () => { openDropdownId = null; };
+    document.addEventListener('click', closeDropdown);
+    return () => document.removeEventListener('click', closeDropdown);
+  });
 
   async function loadInventory() {
     try {
@@ -126,7 +180,13 @@
 
   function validateAdjust(): boolean {
     const e: Record<string, string> = {};
-    if (adjustQty === 0) e.qty = 'La cantidad no puede ser 0';
+    if (adjustTargetStock === null || adjustTargetStock === undefined) {
+      e.qty = 'Ingresá el stock deseado';
+    } else if (adjustTargetStock < 0) {
+      e.qty = 'El stock no puede ser negativo';
+    } else if (adjustDelta === 0) {
+      e.qty = 'El stock deseado es igual al actual — sin cambios';
+    }
     adjustErrors = e;
     return Object.keys(e).length === 0;
   }
@@ -209,8 +269,8 @@
 
   function openAdjust(ps: ProductWithStock) {
     adjustProduct = ps;
-    adjustQty = 0;
-    adjustType = 'purchase';
+    adjustTargetStock = ps.current_stock; // empieza con el stock actual para que el usuario lo edite
+    adjustType = 'adjustment';
     adjustNotes = '';
     adjustLotNumber = '';
     adjustExpiryDate = '';
@@ -221,17 +281,20 @@
   async function handleAdjust() {
     if (!validateAdjust()) return;
     if (!adjustProduct) return;
-    const qty = adjustType === 'adjustment' && adjustQty < 0 ? adjustQty : Math.abs(adjustQty);
+    const qty = adjustDelta; // negativo si reduce, positivo si agrega
+    const type = qty < 0 ? 'adjustment' : adjustType; // reducciones siempre son 'adjustment'
+    const prevStock = adjustProduct.current_stock;
     try {
       await adjustInventory(
-        adjustProduct.product.id, qty, adjustType,
+        adjustProduct.product.id, qty, type,
         adjustNotes || undefined,
         adjustLotNumber || undefined,
         adjustExpiryDate || undefined
       );
       if (currentUser) {
         const sign = qty >= 0 ? '+' : '';
-        logAction(currentUser.id, currentUser.name, 'inventory_adjusted', 'product', adjustProduct.product.id, `${sign}${qty} unidades de "${adjustProduct.product.name}" (${adjustType})`);
+        logAction(currentUser.id, currentUser.name, 'inventory_adjusted', 'product', adjustProduct.product.id,
+          `Stock ajustado: ${prevStock} → ${adjustTargetStock} (${sign}${qty} u.) en "${adjustProduct.product.name}"`);
       }
       showAdjust = false;
       await loadInventory();
@@ -540,11 +603,11 @@
           <th onclick={() => table.sortBy('product.name')} style="cursor: pointer; user-select: none;">
             Producto {table.sortColumn === 'product.name' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
           </th>
-          <th onclick={() => table.sortBy('category_name')} style="cursor: pointer; user-select: none;">
-            Categoría {table.sortColumn === 'category_name' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
-          </th>
           <th onclick={() => table.sortBy('product.dose')} style="cursor: pointer; user-select: none;">
             Dosis {table.sortColumn === 'product.dose' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+          </th>
+          <th onclick={() => table.sortBy('category_name')} style="cursor: pointer; user-select: none;">
+            Categoría {table.sortColumn === 'category_name' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
           </th>
           <th onclick={() => table.sortBy('supplier_name')} style="cursor: pointer; user-select: none;">
             Proveedor {table.sortColumn === 'supplier_name' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
@@ -573,32 +636,24 @@
               class:row-low-stock={ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0}
               class:row-expiring={ps.expiry_status === 'expiring' && !(ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0)}
             >
-              <!-- Acciones como dropdown al inicio -->
-              <td style="position: relative;">
+              <!-- Acciones: solo el trigger. El menú se renderiza como portal fijo al final del archivo -->
+              <td>
                 <div class="action-dropdown">
                   <button
                     class="btn btn-ghost btn-sm action-trigger"
                     style="padding: 4px 8px; font-size: var(--font-size-base);"
-                    onclick={(e) => toggleDropdown(e, ps.product.id)}
+                    onclick={(e) => toggleDropdown(e, ps)}
                   >⋮</button>
-                  {#if openDropdownId === ps.product.id}
-                  <div class="action-menu" role="menu">
-                    <button class="action-item" onclick={() => { openDropdownId = null; openEditProduct(ps); }}>✏️ Editar</button>
-                    <button class="action-item" onclick={() => { openDropdownId = null; openLots(ps); }}>📦 Lotes</button>
-                    <button class="action-item" onclick={() => { openDropdownId = null; openAdjust(ps); }}>📊 Ajustar stock</button>
-                    <button class="action-item" onclick={() => { openDropdownId = null; openMovements(ps); }}>📜 Historial</button>
-                  </div>
-                  {/if}
                 </div>
               </td>
               <td class="font-mono text-sm">{ps.product.sku}</td>
               <td style="font-weight: 600;">{ps.product.name}</td>
-              <td class="text-muted">{ps.category_name || '—'}</td>
               <td class="text-muted">
                 {#if ps.product.dose}
                   <span class="badge badge-info" style="font-size: var(--font-size-xs);">{ps.product.dose}</span>
                 {:else}—{/if}
               </td>
+              <td class="text-muted">{ps.category_name || '—'}</td>
               <td class="text-muted">{ps.supplier_name || '—'}</td>
               <td>{formatCurrency(ps.product.purchase_price)}</td>
               <td style="font-weight: 600; color: var(--accent-primary);">{formatCurrency(ps.product.sale_price)}</td>
@@ -903,32 +958,109 @@
   </div>
 {/if}
 
-<!-- Adjust Inventory Modal -->
+<!-- ─── Portal: dropdown de acciones (position:fixed, escapa del overflow de la tabla) ─── -->
+{#if openDropdownId}
+  {#if dropdownActiveProduct}
+    <div
+      class="action-menu"
+      role="menu"
+      style="position: fixed; top: {dropdownPos.top}px; left: {dropdownPos.left}px; z-index: 9000;"
+      onclick={(e) => e.stopPropagation()}
+    >
+      <button class="action-item" onclick={() => { openDropdownId = null; const p = dropdownActiveProduct; dropdownActiveProduct = null; if(p) openEditProduct(p); }}>✏️ Editar</button>
+      <button class="action-item" onclick={() => { openDropdownId = null; const p = dropdownActiveProduct; dropdownActiveProduct = null; if(p) openLots(p); }}>📦 Lotes</button>
+      <button class="action-item" onclick={() => { openDropdownId = null; const p = dropdownActiveProduct; dropdownActiveProduct = null; if(p) openAdjust(p); }}>📊 Ajustar stock</button>
+      <button class="action-item" onclick={() => { openDropdownId = null; const p = dropdownActiveProduct; dropdownActiveProduct = null; if(p) openMovements(p); }}>📜 Historial</button>
+      <div style="height: 1px; background: var(--border-primary); margin: 4px 0;"></div>
+      <button class="action-item" style="color: var(--accent-danger);" onclick={() => { openDropdownId = null; const p = dropdownActiveProduct; dropdownActiveProduct = null; if(p) handleArchiveProduct(p); }}>🗑️ Eliminar</button>
+    </div>
+  {/if}
+{/if}
+
 {#if showAdjust && adjustProduct}
   <div class="modal-overlay">
     <div class="modal" onclick={(e) => e.stopPropagation()}>
       <div class="modal-header">
-        <h3 class="modal-title">📊 Ajustar Inventario</h3>
+        <h3 class="modal-title">📊 Ajustar Stock</h3>
         <button class="btn btn-ghost btn-sm" onclick={() => showAdjust = false}>✕</button>
       </div>
       <div class="modal-body">
-        <div style="background: var(--bg-tertiary); border-radius: var(--radius-md); padding: var(--space-lg);">
+
+        <!-- Info del producto -->
+        <div style="background: var(--bg-tertiary); border-radius: var(--radius-md); padding: var(--space-md) var(--space-lg); margin-bottom: var(--space-lg);">
           <div style="font-weight: 700;">{adjustProduct.product.name}</div>
-          <div class="text-sm text-muted">Stock actual: <strong>{adjustProduct.current_stock}</strong></div>
+          <div class="text-sm text-muted">SKU: {adjustProduct.product.sku}</div>
         </div>
-        <div class="input-group">
-          <label class="input-label">Tipo de movimiento</label>
-          <select class="select" bind:value={adjustType}>
-            <option value="purchase">Compra (entrada)</option>
-            <option value="adjustment">Ajuste</option>
-            <option value="return">Devolución</option>
-          </select>
+
+        <!-- Visualización: actual → deseado -->
+        <div style="display: flex; align-items: center; justify-content: center; gap: var(--space-xl); margin-bottom: var(--space-lg); padding: var(--space-lg); background: var(--bg-tertiary); border-radius: var(--radius-md);">
+          <div style="text-align: center;">
+            <div class="text-muted" style="font-size: var(--font-size-xs); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Stock actual</div>
+            <div style="font-size: 2.2rem; font-weight: 800;">{adjustProduct.current_stock}</div>
+          </div>
+          <div style="font-size: 1.8rem; color: var(--text-muted);">→</div>
+          <div style="text-align: center;">
+            <div class="text-muted" style="font-size: var(--font-size-xs); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Stock deseado</div>
+            <div style="font-size: 2.2rem; font-weight: 800; color: {adjustDelta < 0 ? 'var(--accent-danger)' : adjustDelta > 0 ? 'var(--accent-success)' : 'var(--text-muted)'};">
+              {adjustTargetStock ?? adjustProduct.current_stock}
+            </div>
+          </div>
         </div>
+
+        <!-- Input principal -->
         <div class="input-group">
-          <label class="input-label">Cantidad *</label>
-          <input class="input" class:input-error={adjustErrors.qty} type="number" bind:value={adjustQty} oninput={() => { if (adjustErrors.qty) adjustErrors = {}; }} />
+          <label class="input-label">¿Cuánto debería quedar en stock? *</label>
+          <input
+            class="input"
+            class:input-error={adjustErrors.qty}
+            type="number"
+            min="0"
+            step="1"
+            bind:value={adjustTargetStock}
+            oninput={() => { if (adjustErrors.qty) adjustErrors = {}; }}
+            placeholder="Ej: 15"
+            style="font-size: 1.2rem; font-weight: 700; text-align: center;"
+          />
           {#if adjustErrors.qty}<span class="field-error">{adjustErrors.qty}</span>{/if}
         </div>
+
+        <!-- Label informativo del delta -->
+        {#if adjustTargetStock !== null && adjustDelta !== 0}
+          <div style="
+            display: flex; align-items: center; gap: var(--space-sm);
+            padding: var(--space-sm) var(--space-md);
+            border-radius: var(--radius-md);
+            margin-top: calc(var(--space-sm) * -1);
+            margin-bottom: var(--space-md);
+            background: {adjustDelta < 0
+              ? 'color-mix(in srgb, var(--accent-danger) 10%, transparent)'
+              : 'color-mix(in srgb, var(--accent-success) 10%, transparent)'};
+            border: 1px solid {adjustDelta < 0
+              ? 'color-mix(in srgb, var(--accent-danger) 30%, transparent)'
+              : 'color-mix(in srgb, var(--accent-success) 30%, transparent)'};
+          ">
+            <span style="font-size: 1.1rem;">{adjustDelta < 0 ? '📉' : '📈'}</span>
+            <span style="font-size: var(--font-size-sm); font-weight: 600; color: {adjustDelta < 0 ? 'var(--accent-danger)' : 'var(--accent-success)'};">
+              {adjustDelta < 0
+                ? `Se reducirán ${Math.abs(adjustDelta)} unidades del stock actual`
+                : `Se agregarán ${adjustDelta} unidades al stock actual`}
+            </span>
+          </div>
+        {/if}
+
+        <!-- Tipo de entrada — solo visible si se está agregando stock -->
+        {#if adjustDelta > 0}
+          <div class="input-group">
+            <label class="input-label">Tipo de entrada</label>
+            <select class="select" bind:value={adjustType}>
+              <option value="purchase">🛒 Compra</option>
+              <option value="return">↩️ Devolución de cliente</option>
+              <option value="adjustment">🔧 Ajuste manual</option>
+            </select>
+          </div>
+        {/if}
+
+        <!-- Lote y vencimiento -->
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg);">
           <div class="input-group">
             <label class="input-label">Número de lote</label>
@@ -939,14 +1071,19 @@
             <input class="input" type="date" bind:value={adjustExpiryDate} />
           </div>
         </div>
+
         <div class="input-group">
-          <label class="input-label">Notas</label>
-          <input class="input" bind:value={adjustNotes} placeholder="Motivo del ajuste..." />
+          <label class="input-label">Motivo del ajuste</label>
+          <input class="input" bind:value={adjustNotes} placeholder="Ej: merma, corrección de conteo, vencimiento..." />
         </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick={() => showAdjust = false}>Cancelar</button>
-        <button class="btn btn-primary" onclick={handleAdjust}>✅ Aplicar</button>
+        <button
+          class="btn btn-primary"
+          disabled={adjustDelta === 0 || adjustTargetStock === null}
+          onclick={handleAdjust}
+        >✅ Aplicar ajuste</button>
       </div>
     </div>
   </div>
@@ -1149,6 +1286,88 @@
   </div>
 {/if}
 
+<!-- ─── Modal confirmación: archivar producto con stock ─── -->
+{#if archiveConfirm}
+  <div class="modal-overlay" onclick={() => archiveConfirm = null}>
+    <div class="modal" onclick={(e) => e.stopPropagation()} style="max-width: 420px;">
+      <div class="modal-header">
+        <h3 class="modal-title">🗑️ Eliminar Producto</h3>
+        <button class="btn btn-ghost btn-sm" onclick={() => archiveConfirm = null}>✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; flex-direction: column; gap: var(--space-md);">
+          <div style="
+            background: color-mix(in srgb, var(--accent-warning) 12%, transparent);
+            border: 1px solid color-mix(in srgb, var(--accent-warning) 40%, transparent);
+            border-radius: var(--radius-md);
+            padding: var(--space-md) var(--space-lg);
+            display: flex; gap: var(--space-md); align-items: flex-start;
+          ">
+            <span style="font-size: 1.5rem; line-height: 1;">⚠️</span>
+            <div>
+              <div style="font-weight: 700; margin-bottom: 4px;">Este producto tiene stock activo</div>
+              <div class="text-sm text-muted">
+                <strong>{archiveConfirm.product.name}</strong> tiene
+                <strong style="color: var(--accent-warning);">{archiveConfirm.current_stock} unidades</strong> en inventario.
+                Al archivar, el producto desaparecerá del sistema pero el historial de ventas quedará intacto.
+              </div>
+            </div>
+          </div>
+          <p class="text-sm text-muted">
+            Si querés registrar la salida del stock antes de archivar, cerrá este diálogo y usá <strong>Ajustar stock</strong>.
+          </p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick={() => archiveConfirm = null}>Cancelar</button>
+        <button
+          class="btn btn-danger"
+          disabled={archiving}
+          onclick={() => archiveConfirm && doArchive(archiveConfirm)}
+        >
+          {archiving ? 'Eliminando...' : '🗑️ Eliminar de todas formas'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
+<!-- ─── Toast: producto archivado ─── -->
+{#if archiveToast}
+  <div style="
+    position: fixed;
+    bottom: var(--space-xl);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    background: var(--bg-card);
+    border: 1px solid var(--border-primary);
+    border-left: 4px solid var(--accent-success);
+    border-radius: var(--radius-md);
+    padding: var(--space-md) var(--space-xl);
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    animation: slideUp 0.25s ease;
+    min-width: 280px;
+  ">
+    <span style="font-size: 1.2rem;">✅</span>
+    <div>
+      <div style="font-weight: 600; font-size: var(--font-size-sm);">Producto eliminado</div>
+      <div class="text-muted" style="font-size: var(--font-size-xs);">"{archiveToast.name}" ya no aparecerá en el sistema</div>
+    </div>
+    <button
+      class="btn btn-ghost btn-sm"
+      onclick={() => archiveToast = null}
+      style="margin-left: auto; padding: 2px 6px;"
+    >✕</button>
+  </div>
+{/if}
 
-
+<style>
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateX(-50%) translateY(16px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+  }
+</style>

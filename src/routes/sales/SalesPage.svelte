@@ -275,11 +275,16 @@
               <th onclick={() => table.sortBy('status')} style="cursor: pointer; user-select: none;">
                 Estado {table.sortColumn === 'status' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
               </th>
+              {#if currentUser?.role !== 'cashier'}
+                <th onclick={() => table.sortBy('user_name')} style="cursor: pointer; user-select: none;">
+                  Cajero {table.sortColumn === 'user_name' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+                </th>
+              {/if}
             </tr>
           </thead>
           <tbody>
             {#if table.paginated.length === 0}
-              <tr><td colspan="6" class="text-center text-muted" style="padding: var(--space-3xl);">No hay ventas en el período seleccionado</td></tr>
+              <tr><td colspan={currentUser?.role !== 'cashier' ? 7 : 6} class="text-center text-muted" style="padding: var(--space-3xl);">No hay ventas en el período seleccionado</td></tr>
             {:else}
               {#each table.paginated as sale}
                 <tr
@@ -300,6 +305,9 @@
                     {sale.payment_method}
                   </td>
                   <td><span class="badge {statusBadge(sale.status).class}">{statusBadge(sale.status).label}</span></td>
+                  {#if currentUser?.role !== 'cashier'}
+                    <td class="text-sm text-muted" style="font-weight: 500;">{sale.user_name || '—'}</td>
+                  {/if}
                 </tr>
               {/each}
             {/if}

@@ -23,7 +23,7 @@ pub fn get_inventory(db: State<'_, Database>, low_stock_only: Option<bool>, expi
          LEFT JOIN (
              SELECT product_id,
                     SUM(quantity) as total_stock,
-                    MIN(CASE WHEN quantity > 0 AND expiry_date IS NOT NULL THEN expiry_date END) as nearest_expiry
+                    MIN(CASE WHEN expiry_date IS NOT NULL THEN expiry_date END) as nearest_expiry
              FROM inventory
              GROUP BY product_id
          ) inv ON inv.product_id = p.id
@@ -190,14 +190,14 @@ pub fn adjust_inventory(
 
         if let Some(inv_id) = existing {
             conn.execute(
-                "UPDATE inventory SET quantity = quantity + ?1, updated_at = datetime('now', '-4 hours') WHERE id = ?2",
-                rusqlite::params![quantity, &inv_id],
+                "UPDATE inventory SET quantity = quantity + ?1, expiry_date = COALESCE(?2, expiry_date), updated_at = datetime('now', '-4 hours') WHERE id = ?3",
+                rusqlite::params![quantity, &expiry_date, &inv_id],
             ).map_err(|e| e.to_string())?;
         } else {
             conn.execute(
-                "INSERT INTO inventory (id, product_id, quantity) VALUES (?1, ?2, ?3)",
+                "INSERT INTO inventory (id, product_id, quantity, expiry_date) VALUES (?1, ?2, ?3, ?4)",
                 rusqlite::params![
-                    Uuid::new_v4().to_string(), &product_id, quantity
+                    Uuid::new_v4().to_string(), &product_id, quantity, &expiry_date
                 ],
             ).map_err(|e| e.to_string())?;
         }

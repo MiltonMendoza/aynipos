@@ -61,7 +61,7 @@ pub fn get_products(db: State<'_, Database>, search: Option<String>, category_id
          LEFT JOIN (
              SELECT product_id,
                     SUM(quantity) as total_stock,
-                    MIN(CASE WHEN quantity > 0 AND expiry_date IS NOT NULL THEN expiry_date END) as nearest_expiry
+                    MIN(CASE WHEN expiry_date IS NOT NULL THEN expiry_date END) as nearest_expiry
              FROM inventory
              GROUP BY product_id
          ) inv ON inv.product_id = p.id

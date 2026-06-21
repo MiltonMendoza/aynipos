@@ -52,7 +52,7 @@
     { route: 'suppliers', icon: '🏭', label: 'Proveedores' },
     { route: 'reports', icon: '📊', label: 'Reportes', section: 'Análisis' },
     { route: 'settings', icon: '⚙️', label: 'Configuración' },
-    { route: 'migration', icon: '🔄', label: 'Migración Datos', section: 'Herramientas' },
+    // { route: 'migration', icon: '🔄', label: 'Migración Datos', section: 'Herramientas' }, // Hidden - functionality preserved
   ];
 
   // Filter nav items by role permissions

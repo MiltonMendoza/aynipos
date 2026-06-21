@@ -126,6 +126,7 @@ export interface Sale {
   created_at: string | null;
   item_count: number | null;
   first_product: string | null;
+  user_name: string | null;
 }
 
 export interface SaleItem {

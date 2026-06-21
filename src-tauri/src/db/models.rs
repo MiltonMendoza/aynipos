@@ -167,6 +167,7 @@ pub struct Sale {
     pub created_at: Option<String>,
     pub item_count: Option<i64>,
     pub first_product: Option<String>,
+    pub user_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

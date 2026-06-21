@@ -242,6 +242,7 @@ button, label, nav, aside {
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
+  overflow: hidden; /* contiene el scroll interno */
   transition: width var(--transition-slow), min-width var(--transition-slow);
   z-index: 10;
 }
@@ -295,6 +296,28 @@ button, label, nav, aside {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Scrollbar sutil para el nav */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 .sidebar-section-label {
@@ -870,7 +893,8 @@ tbody tr:hover {
   display: flex;
   align-items: center;
   gap: var(--space-md);
-  max-width: 400px;
+  max-width: 420px;
+  overflow: hidden; /* needed for progress bar clipping */
 }
 
 .toast-success {
