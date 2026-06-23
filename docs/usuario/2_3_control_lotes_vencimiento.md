@@ -27,11 +27,34 @@ En el menú lateral izquierdo, haz clic en **📦 Inventario**.
 
 #### Paso 2: Ajustar stock
 
-Busca el producto en la tabla y haz clic en **📊 Ajustar** en la columna de acciones.
+Busca el producto en la tabla y haz clic en el menú **⋮** (tres puntos) en la fila del producto, luego seleccioná **📊 Ajustar Stock**.
 
-#### Paso 3: Llenar los datos del lote
+#### Paso 3: Ingresar el stock final deseado
 
-En la ventana de ajuste verás los campos habituales (tipo de movimiento, cantidad) y además dos campos nuevos:
+En la ventana de ajuste, el sistema ya muestra cuántas unidades tenés actualmente. Simplemente escribí **cuántas unidades querés tener al final**.
+
+> **Ejemplo:** Si tenés 20 unidades y recibiste 30 más, escribí `50` — el sistema calcula automáticamente que se agregarán 30 unidades.
+
+El sistema te confirma el cambio al instante:
+- 📈 **"Se agregarán X unidades"** — si el número que pusiste es mayor al actual
+- 📉 **"Se reducirán X unidades"** — si el número que pusiste es menor al actual
+- El botón **Aplicar** se desactiva si el número es igual al actual (no hay cambio)
+
+#### Paso 4: Elegir el tipo de movimiento (solo si se agrega stock)
+
+Si el ajuste **suma** unidades, aparecerá un selector para indicar el motivo:
+
+| Tipo | ¿Cuándo usarlo? |
+|------|------------------|
+| **Compra** | Llegó mercadería nueva del proveedor |
+| **Devolución** | Un cliente devolvió un producto |
+| **Ajuste manual** | Corrección de inventario (conteo físico, etc.) |
+
+Si el ajuste **reduce** unidades, no se pide el tipo — se registra como ajuste.
+
+#### Paso 5: Llenar los datos del lote (opcional)
+
+Si querés registrar de qué lote viene la mercadería, completá estos campos:
 
 | Campo | ¿Obligatorio? | Descripción |
 |-------|:---:|-------------|
@@ -40,11 +63,11 @@ En la ventana de ajuste verás los campos habituales (tipo de movimiento, cantid
 
 Puedes llenar uno, ambos, o ninguno según lo que necesites.
 
-#### Paso 4: Aplicar
+#### Paso 6: Aplicar
 
-Haz clic en **✅ Aplicar**. El stock se suma y el lote queda registrado.
+Haz clic en **✅ Aplicar**. El stock se actualiza y el lote queda registrado.
 
-> 💡 **Tip:** Si recibes 50 unidades del mismo producto pero de **2 lotes distintos**, haz dos ajustes separados — uno por cada lote con su fecha de vencimiento.
+> 💡 **Tip:** Si recibís 50 unidades del mismo producto pero de **2 lotes distintos**, hacé dos ajustes separados — uno por cada lote con su fecha de vencimiento.
 
 ---
 

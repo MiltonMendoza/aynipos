@@ -27,6 +27,7 @@
 | 2.1 | ✏️ Editar producto | Modifica los datos de un producto existente | [Ver guía](2_1_editar_producto.md) |
 | 2.2 | 📥📤 Importar/exportar productos | Carga masiva desde CSV y descarga tu catálogo | [Ver guía](2_2_importar_exportar.md) |
 | 2.3 | 📦 Control de lotes y vencimiento | Registra lotes con fecha de caducidad y recibe alertas visuales | [Ver guía](2_3_control_lotes_vencimiento.md) |
+| 2.4 | 🗑️ Eliminar (archivar) producto | Retira un producto del catálogo sin perder su historial | [Ver guía](2_4_eliminar_producto.md) |
 | 2.5 | 📜 Historial de movimientos | Consulta entradas, salidas y ajustes de cada producto | [Ver guía](2_5_historial_movimientos.md) |
 
 ### Fase 3: Reportes y Análisis
@@ -41,6 +42,13 @@
 | 3.6 | 📦 Reporte de inventario | Valorización del stock actual y productos sin movimiento | [Ver guía](3_6_reporte_inventario.md) |
 | 3.7 | 📥 Exportar a Excel/PDF | Descarga cualquier reporte como CSV o PDF | [Ver guía](3_7_exportar_excel_pdf.md) |
 
+### Fase 4: Cobro y Ventas
+
+| # | Función | Descripción | Documentación |
+|---|---------|-------------|---------------|
+| 4.1 | 💵 Cobro rápido | Cobra al instante con 3 botones directos — sin ventanas de confirmación | [Ver guía](4_1_cobro_rapido.md) |
+| 4.2 | 👤 Columna "Cajero" en Ventas | El admin ve quién realizó cada venta (ordenable por cajero) | [Ver guía](4_2_columna_cajero.md) |
+
 ### Fase 5: Multi-usuario y Seguridad
 
 | # | Función | Descripción | Documentación |
@@ -49,7 +57,8 @@
 | 5.2 | 🛡️ Roles y permisos | Controla quién accede a cada sección según su puesto | [Ver guía](5_2_roles_permisos.md) |
 | 5.3 | 📋 Registro de actividad | Historial detallado: quién hizo qué y cuándo | [Ver guía](5_3_registro_actividad.md) |
 | 5.4 | 👤 Cajero por turno | Cada turno de caja asociado a su cajero, con historial filtrable | [Ver guía](5_4_cajero_por_turno.md) |
+| 5.5 | 📊 Ventas por rol | El cajero ve solo sus ventas; el admin ve el total de la tienda | [Ver guía](5_5_ventas_por_rol.md) |
 
 ---
 
-_Última actualización: 2026-02-22_
+_Última actualización: 2026-06-22_

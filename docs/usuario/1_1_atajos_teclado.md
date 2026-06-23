@@ -11,13 +11,14 @@ Los atajos de teclado te permiten hacer todo más rápido cuando estás atendien
 | Atajo | Acción | ¿Cuándo funciona? |
 |-------|--------|--------------------|
 | **F1** | Buscar producto | En cualquier momento en la pantalla de ventas |
-| **F2** | Cobrar (abrir ventana de pago) | Cuando hay productos en el carrito |
+| **F2** | Cobrar con **Efectivo** | Cuando hay productos en el carrito |
 | **F3** | Buscar/cambiar cliente | En cualquier momento en la pantalla de ventas |
 | **F4** | Limpiar carrito | Cuando hay productos en el carrito (hay que presionar 2 veces) |
 | **Enter** | Confirmar la venta | Cuando la ventana de pago está abierta |
 | **Esc** | Cerrar ventana/modal | Cuando hay una ventana abierta (pago, cliente, notas, etc.) |
 | **+ (más)** | Aumentar cantidad del último producto | Cuando no estás escribiendo en un campo de texto |
 | **− (menos)** | Disminuir cantidad del último producto | Cuando no estás escribiendo en un campo de texto |
+| **F8** | Deshacer la última venta | Solo mientras aparece el mensaje de "¡Venta Completada!" |
 | **F10** | Mostrar/ocultar la guía de atajos | En cualquier pantalla de la app |
 
 ## ¿Cómo se usa?
@@ -36,7 +37,11 @@ Después de agregar un producto al carrito, usá las teclas **+** y **−** para
 
 ### Paso 3: Cobrar la venta
 
-Cuando el carrito esté listo, presioná **F2** para abrir la ventana de pago. Elegí el método de pago, y después presioná **Enter** para confirmar la venta. ¡Así de rápido!
+Cuando el carrito esté listo, presioná **F2** para cobrar directamente en **Efectivo** — sin pasos intermedios. Si querés cobrar con otro método, usá los botones en la pantalla (📱 QR). La venta se registra al instante.
+
+### Paso 3b: Deshacer una venta (F8)
+
+Si justo después de cobrar cometiste un error (producto equivocado, cantidad mal), presioná **F8** mientras el mensaje de "¡Venta Completada!" siga en pantalla. Tenés **10 segundos** antes de que desaparezca.
 
 ### Paso 4: Asociar un cliente
 
@@ -56,11 +61,15 @@ Si necesitás empezar de cero, presioná **F4**. Por seguridad, tenés que presi
 
 ### ¿Los atajos funcionan en todas las pantallas?
 
-La mayoría de los atajos (**F1, F2, F3, F4, +, −, Enter, Esc**) funcionan solo en la pantalla de **Punto de Venta**. El atajo **F10** (ver atajos) funciona en cualquier pantalla de la app.
+La mayoría de los atajos (**F1, F2, F3, F4, F8, +, −, Enter, Esc**) funcionan solo en la pantalla de **Punto de Venta**. El atajo **F10** (ver atajos) funciona en cualquier pantalla de la app.
 
 ### ¿Qué pasa si presiono F2 y el carrito está vacío?
 
-No pasa nada. El sistema solo abre la ventana de pago cuando hay al menos un producto en el carrito.
+No pasa nada. El cobro solo se procesa cuando hay al menos un producto en el carrito.
+
+### ¿Qué pasa si presiono F8 pero ya pasaron los 10 segundos?
+
+Ya no es posible deshacer esa venta desde aquí. Podés contactar al administrador para hacer una anulación manual desde la vista de **Ventas**.
 
 ### ¿Qué pasa si presiono F2 y la caja está cerrada?
 
@@ -78,5 +87,7 @@ No te preocupés, el carrito **no** se limpia con un solo F4. Primero aparece un
 
 - 🎯 Los atajos están pensados para que puedas atender más rápido, pero no son obligatorios
 - 🔒 F4 requiere doble pulsación para evitar borrar el carrito por accidente
+- ⏱️ F8 (deshacer venta) solo funciona durante los **10 segundos** que aparece el mensaje de confirmación
+- 💵 F2 cobra directamente en efectivo — el método más común en caja
 - 📡 Si usás lector de código de barras, el cursor de búsqueda se mantiene activo automáticamente — no necesitás presionar F1 cada vez
 - ⌨️ Podés ver la guía rápida de atajos en cualquier momento con **F10** o desde el botón en el menú lateral
