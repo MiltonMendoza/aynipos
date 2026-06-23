@@ -882,19 +882,20 @@ tbody tr:hover {
 .toast {
   position: fixed;
   bottom: var(--space-xl);
-  right: var(--space-xl);
+  right: calc(380px + var(--space-xl));
   background: var(--bg-elevated);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  padding: var(--space-lg) var(--space-xl);
+  padding: var(--space-md) var(--space-lg);
   box-shadow: var(--shadow-lg);
   z-index: 200;
   animation: slideUp var(--transition-base);
   display: flex;
   align-items: center;
   gap: var(--space-md);
-  max-width: 420px;
-  overflow: hidden; /* needed for progress bar clipping */
+  max-width: 480px;
+  min-width: 240px;
+  overflow: hidden;
 }
 
 .toast-success {

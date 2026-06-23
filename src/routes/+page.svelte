@@ -269,8 +269,10 @@
       <button class="btn btn-ghost btn-sm" style="padding: 0; width: 20px; height: 20px; font-size: var(--font-size-xs);" onclick={() => showShortcuts = false}>✕</button>
     </h4>
     <div class="shortcut-row"><span>Buscar producto</span><span class="shortcut-key">F1</span></div>
-    <div class="shortcut-row"><span>Cobrar</span><span class="shortcut-key">F2</span></div>
+    <div class="shortcut-row"><span>Cobrar (Efectivo)</span><span class="shortcut-key">F2</span></div>
+    <div class="shortcut-row"><span>Seleccionar cliente</span><span class="shortcut-key">F3</span></div>
     <div class="shortcut-row"><span>Limpiar carrito</span><span class="shortcut-key">F4</span></div>
+    <div class="shortcut-row"><span>Deshacer última venta</span><span class="shortcut-key">F8</span></div>
     <div class="shortcut-row"><span>Confirmar venta</span><span class="shortcut-key">Enter</span></div>
     <div class="shortcut-row"><span>Cerrar modal</span><span class="shortcut-key">Esc</span></div>
     <div class="shortcut-row"><span>Cantidad +1 / −1</span><span class="shortcut-key">+ / −</span></div>

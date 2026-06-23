@@ -59,10 +59,20 @@
   let searchQuery = $state('');
   let cashRegisterOpen = $state(false);
   let cashReceived = $state(0);
-  let toast = $state({ show: false, message: '', type: 'success' as 'success' | 'error' | 'warning', undoSaleId: null as string | null });
+  let toast = $state({ show: false, message: '', type: 'success' as 'success' | 'error' | 'warning' });
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
-  let undoProgress = $state(0); // 0-100, drives the progress bar
-  let undoProgressTimer: ReturnType<typeof setInterval> | null = null;
+  
+  // Sale success feedback in empty cart area
+  let saleFeedback = $state({
+    show: false,
+    message: '',
+    amount: 0,
+    undoSaleId: null as string | null,
+    progress: 100
+  });
+  let saleFeedbackTimer: ReturnType<typeof setTimeout> | null = null;
+  let saleFeedbackProgressTimer: ReturnType<typeof setInterval> | null = null;
+
   let savedCart: CartItem[] = []; // snapshot for undo
   let searchInputRef: HTMLInputElement | undefined = $state(undefined);
   let f4PendingConfirm = $state(false);
@@ -308,9 +318,24 @@
         updateQuantity(lastIdx, cart[lastIdx].quantity - 1);
       }
     }
+
+    // F8 — deshacer última venta
+    if (e.key === 'F8') {
+      if (saleFeedback.show && saleFeedback.undoSaleId) {
+        e.preventDefault();
+        undoLastSale();
+      }
+      return;
+    }
   }
 
   function addToCart(ps: ProductWithStock, fromBarcode = false) {
+    if (saleFeedback.show) {
+      clearSaleFeedbackTimers();
+      saleFeedback.show = false;
+      savedCart = [];
+    }
+
     // Validate: stock = 0
     if (ps.current_stock <= 0) {
       showToast(`❌ Sin stock disponible para "${ps.product.name}"`, 'error');
@@ -492,7 +517,7 @@
       await loadProducts(searchQuery);
       refocusSearch();
 
-      showSaleToast(`✅ Venta registrada · ${formatCurrency(saleTotal)}`, completedSale.id, cartSnapshot, saleNotesSnapshot);
+      showSaleToast(`Venta registrada con éxito`, completedSale.id, cartSnapshot, saleNotesSnapshot, saleTotal);
     } catch (e) {
       showToast(`❌ Error: ${e}`, 'error');
     }
@@ -513,41 +538,50 @@
 
   function clearToastTimers() {
     if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
-    if (undoProgressTimer) { clearInterval(undoProgressTimer); undoProgressTimer = null; }
+  }
+
+  function clearSaleFeedbackTimers() {
+    if (saleFeedbackTimer) { clearTimeout(saleFeedbackTimer); saleFeedbackTimer = null; }
+    if (saleFeedbackProgressTimer) { clearInterval(saleFeedbackProgressTimer); saleFeedbackProgressTimer = null; }
   }
 
   function showToast(message: string, type: 'success' | 'error' | 'warning') {
     clearToastTimers();
-    toast = { show: true, message, type, undoSaleId: null };
+    toast = { show: true, message, type };
     if (type === 'error') playErrorSound();
     toastTimer = setTimeout(() => { toast.show = false; }, 3000);
   }
 
   const UNDO_DURATION = 10000; // ms
 
-  function showSaleToast(message: string, saleId: string, cartSnapshot: CartItem[], notesSnapshot: string) {
-    clearToastTimers();
+  function showSaleToast(message: string, saleId: string, cartSnapshot: CartItem[], notesSnapshot: string, totalAmount: number) {
+    clearSaleFeedbackTimers();
     savedCart = cartSnapshot;
-    undoProgress = 100;
-    toast = { show: true, message, type: 'success', undoSaleId: saleId };
+    saleFeedback = {
+      show: true,
+      message,
+      amount: totalAmount,
+      undoSaleId: saleId,
+      progress: 100
+    };
 
     const step = 100 / (UNDO_DURATION / 50);
-    undoProgressTimer = setInterval(() => {
-      undoProgress = Math.max(0, undoProgress - step);
-      if (undoProgress <= 0) { clearToastTimers(); }
+    saleFeedbackProgressTimer = setInterval(() => {
+      saleFeedback.progress = Math.max(0, saleFeedback.progress - step);
+      if (saleFeedback.progress <= 0) { clearSaleFeedbackTimers(); }
     }, 50);
 
-    toastTimer = setTimeout(() => {
-      toast.show = false;
+    saleFeedbackTimer = setTimeout(() => {
+      saleFeedback.show = false;
       savedCart = [];
     }, UNDO_DURATION);
   }
 
   async function undoLastSale() {
-    const saleId = toast.undoSaleId;
+    const saleId = saleFeedback.undoSaleId;
     if (!saleId) return;
-    clearToastTimers();
-    toast.show = false;
+    clearSaleFeedbackTimers();
+    saleFeedback.show = false;
     try {
       await cancelSale(saleId);
       // Restore cart
@@ -988,11 +1022,140 @@
     <!-- Cart items -->
     <div style="flex: 1; overflow-y: auto; padding: var(--space-md);">
       {#if cart.length === 0}
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); gap: var(--space-md);">
-          <div style="font-size: 2.5rem; opacity: 0.4;">🛒</div>
-          <p class="text-sm">El carrito está vacío</p>
-          <p class="text-xs">Haz clic en un producto para agregarlo</p>
-        </div>
+        {#if saleFeedback.show}
+          <div style="
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            padding: var(--space-lg);
+            animation: fadeIn var(--transition-base);
+          ">
+            <div style="
+              background: var(--bg-elevated);
+              border: 1px solid var(--border-color);
+              border-radius: var(--radius-lg);
+              padding: var(--space-xl);
+              width: 100%;
+              max-width: 320px;
+              box-shadow: var(--shadow-md);
+              position: relative;
+              overflow: hidden;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              gap: var(--space-md);
+              text-align: center;
+              border-top: 4px solid var(--accent-success);
+            ">
+              <!-- Close button -->
+              <button
+                onclick={() => { clearSaleFeedbackTimers(); saleFeedback.show = false; savedCart = []; }}
+                style="
+                  position: absolute;
+                  top: var(--space-sm);
+                  right: var(--space-sm);
+                  border: none;
+                  background: transparent;
+                  color: var(--text-muted);
+                  font-size: var(--font-size-md);
+                  font-weight: 700;
+                  cursor: pointer;
+                  opacity: 0.6;
+                  transition: opacity var(--transition-fast);
+                "
+                onmouseenter={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = '1'}
+                onmouseleave={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = '0.6'}
+                title="Cerrar confirmación"
+              >✕</button>
+
+              <!-- Success check icon -->
+              <div style="
+                width: 48px;
+                height: 48px;
+                border-radius: var(--radius-full);
+                background: var(--accent-success-glow);
+                color: var(--accent-success);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 1.5rem;
+                font-weight: 700;
+                margin-bottom: var(--space-xs);
+              ">
+                ✓
+              </div>
+
+              <div>
+                <h3 style="font-weight: 700; font-size: var(--font-size-md); color: var(--text-primary); margin-bottom: 2px;">
+                  ¡Venta Completada!
+                </h3>
+                <p style="font-size: var(--font-size-xs); color: var(--text-muted);">
+                  {saleFeedback.message}
+                </p>
+              </div>
+
+              <div style="
+                font-size: 1.6rem;
+                font-weight: 900;
+                color: var(--accent-success);
+                margin: var(--space-xs) 0;
+              ">
+                {formatCurrency(saleFeedback.amount)}
+              </div>
+
+              {#if saleFeedback.undoSaleId}
+                <button
+                  class="btn btn-ghost"
+                  onclick={undoLastSale}
+                  style="
+                    width: 100%;
+                    padding: var(--space-sm);
+                    font-size: var(--font-size-sm);
+                    font-weight: 700;
+                    border: 1px dashed var(--accent-danger);
+                    color: var(--accent-danger);
+                    border-radius: var(--radius-md);
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: var(--space-xs);
+                    transition: all var(--transition-fast);
+                  "
+                  onmouseenter={(e) => {
+                    const el = e.currentTarget as HTMLButtonElement;
+                    el.style.background = 'var(--accent-danger-glow)';
+                  }}
+                  onmouseleave={(e) => {
+                    const el = e.currentTarget as HTMLButtonElement;
+                    el.style.background = 'transparent';
+                  }}
+                  title="Deshacer venta (F8)"
+                >
+                  <span>↩</span> Deshacer Venta (F8)
+                </button>
+              {/if}
+
+              <!-- Progress bar countdown -->
+              <div style="
+                position: absolute;
+                bottom: 0; left: 0;
+                height: 4px;
+                width: {saleFeedback.progress}%;
+                background: var(--accent-success);
+                transition: width 0.05s linear;
+              "></div>
+            </div>
+          </div>
+        {:else}
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); gap: var(--space-md);">
+            <div style="font-size: 2.5rem; opacity: 0.4;">🛒</div>
+            <p class="text-sm">El carrito está vacío</p>
+            <p class="text-xs">Haz clic en un producto para agregarlo</p>
+          </div>
+        {/if}
       {:else}
         <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
           {#each cart as item, index}
@@ -1283,39 +1446,9 @@
     class:toast-success={toast.type === 'success'}
     class:toast-error={toast.type === 'error'}
     class:toast-shake={toast.type === 'error'}
-    style={toast.type === 'warning' && !toast.undoSaleId ? 'border-left: 3px solid var(--accent-warning);' : ''}
+    style={toast.type === 'warning' ? 'border-left: 3px solid var(--accent-warning);' : ''}
   >
-    <span style="flex: 1;">{toast.message}</span>
-    {#if toast.undoSaleId}
-      <button
-        onclick={undoLastSale}
-        style="
-          margin-left: var(--space-md);
-          padding: 4px 12px;
-          border-radius: var(--radius-sm);
-          border: 1px solid rgba(255,255,255,0.4);
-          background: rgba(255,255,255,0.15);
-          color: inherit;
-          font-size: var(--font-size-sm);
-          font-weight: 700;
-          cursor: pointer;
-          white-space: nowrap;
-          transition: background 0.15s;
-        "
-        onmouseenter={(e) => (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.28)'}
-        onmouseleave={(e) => (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.15)'}
-      >↩ Deshacer</button>
-      <!-- Progress bar -->
-      <div style="
-        position: absolute;
-        bottom: 0; left: 0;
-        height: 3px;
-        width: {undoProgress}%;
-        background: rgba(255,255,255,0.6);
-        border-radius: 0 0 var(--radius-sm) var(--radius-sm);
-        transition: width 0.05s linear;
-      "></div>
-    {/if}
+    <span>{toast.message}</span>
   </div>
 {/if}
 
