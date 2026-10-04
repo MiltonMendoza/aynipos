@@ -162,6 +162,7 @@ pub fn import_products_csv(db: State<'_, Database>, file_path: String) -> Result
     let idx_unit          = col("unidad");
     let idx_min_stock     = col("stock_minimo");
     let idx_initial_stock = col("stock_inicial");
+    let idx_supplier_name = col("proveedor"); // opcional: nombre del proveedor para upsert por (sku, proveedor)
 
     // ── Columnas opcionales de migración de vencimiento ──────────────────
     let idx_expiry       = col("fecha_vencimiento");
@@ -310,10 +311,35 @@ pub fn import_products_csv(db: State<'_, Database>, file_path: String) -> Result
             }
         };
 
-        // ── Upsert producto por SKU ────────────────────────────────────────
+        // ── Resolver proveedor opcional (find or create) ───────────────────
+        // Columna CSV: "proveedor" (nombre del proveedor). Si no viene, supplier_id = None.
+        let supplier_id: Option<String> = if let Some(ref sup_name) = get_optional(&record, idx_supplier_name) {
+            let existing_id: Option<String> = conn.query_row(
+                "SELECT id FROM suppliers WHERE LOWER(name) = LOWER(?1) AND is_active = 1",
+                [sup_name],
+                |row| row.get(0),
+            ).optional().map_err(|e| e.to_string())?;
+
+            Some(match existing_id {
+                Some(id) => id,
+                None => {
+                    let new_id = Uuid::new_v4().to_string();
+                    conn.execute(
+                        "INSERT INTO suppliers (id, name, is_active) VALUES (?1, ?2, 1)",
+                        rusqlite::params![&new_id, sup_name],
+                    ).map_err(|e| e.to_string())?;
+                    new_id
+                }
+            })
+        } else {
+            None
+        };
+
+        // ── Upsert producto por (sku, supplier_id) ─────────────────────────
+        // Desde migration v10, el mismo SKU puede existir para diferentes proveedores.
         let existing_product_id: Option<String> = conn.query_row(
-            "SELECT id FROM products WHERE sku = ?1",
-            [&sku],
+            "SELECT id FROM products WHERE sku = ?1 AND COALESCE(supplier_id, '') = COALESCE(?2, '')",
+            rusqlite::params![&sku, &supplier_id],
             |row| row.get(0),
         ).optional().map_err(|e| e.to_string())?;
 
@@ -322,12 +348,12 @@ pub fn import_products_csv(db: State<'_, Database>, file_path: String) -> Result
                 conn.execute(
                     "UPDATE products SET name = ?1, barcode = ?2, description = ?3, category_id = ?4,
                      purchase_price = ?5, sale_price = ?6, tax_rate = ?7, unit = ?8, min_stock = ?9,
-                     is_active = 1, updated_at = datetime('now', '-4 hours')
-                     WHERE id = ?10",
+                     supplier_id = ?10, is_active = 1, updated_at = datetime('now', '-4 hours')
+                     WHERE id = ?11",
                     rusqlite::params![
                         &name, &barcode, &description, &category_id,
                         purchase_price, sale_price, tax_rate, &unit, min_stock,
-                        &pid
+                        &supplier_id, &pid
                     ],
                 ).map_err(|e| format!("Error al actualizar SKU '{}': {}", sku, e))?;
                 result.updated += 1;
@@ -337,11 +363,11 @@ pub fn import_products_csv(db: State<'_, Database>, file_path: String) -> Result
                 let new_pid = Uuid::new_v4().to_string();
                 conn.execute(
                     "INSERT INTO products (id, sku, barcode, name, description, category_id,
-                     purchase_price, sale_price, tax_rate, unit, min_stock)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                     purchase_price, sale_price, tax_rate, unit, min_stock, supplier_id)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                     rusqlite::params![
                         &new_pid, &sku, &barcode, &name, &description, &category_id,
-                        purchase_price, sale_price, tax_rate, &unit, min_stock
+                        purchase_price, sale_price, tax_rate, &unit, min_stock, &supplier_id
                     ],
                 ).map_err(|e| format!("Error al crear SKU '{}': {}", sku, e))?;
 
@@ -365,6 +391,7 @@ pub fn import_products_csv(db: State<'_, Database>, file_path: String) -> Result
                 new_pid
             }
         };
+
 
         // ── Migración de fecha de vencimiento ─────────────────────────────
         // Estrategia: actualizar el lote existente con expiry_date IS NULL

@@ -151,6 +151,24 @@ pub fn create_product(db: State<'_, Database>, product: CreateProduct) -> Result
         }
     }
 
+    // Validate (sku, supplier_id) uniqueness — enforced at app level since migration v10
+    {
+        let existing_name: Option<String> = conn.query_row(
+            "SELECT name FROM products
+             WHERE sku = ?1
+               AND COALESCE(supplier_id, '') = COALESCE(?2, '')
+               AND is_active = 1",
+            rusqlite::params![&product.sku, &product.supplier_id],
+            |row| row.get(0),
+        ).optional().map_err(|e| e.to_string())?;
+        if let Some(name) = existing_name {
+            return Err(format!(
+                "Ya existe \"{}\" con el SKU '{}' para este proveedor.",
+                name, product.sku
+            ));
+        }
+    }
+
     conn.execute(
         "INSERT INTO products (id, sku, barcode, name, description, category_id, purchase_price, sale_price, tax_rate, unit, min_stock, metadata, supplier_id, dose)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
@@ -203,6 +221,25 @@ pub fn update_product(db: State<'_, Database>, product: UpdateProduct) -> Result
             if let Some(name) = existing {
                 return Err(format!("Ya existe un producto con ese código de barras: {}", name));
             }
+        }
+    }
+
+    // Validate (sku, supplier_id) uniqueness on update — enforced at app level since migration v10
+    if let Some(ref sku) = product.sku {
+        let existing_name: Option<String> = conn.query_row(
+            "SELECT name FROM products
+             WHERE sku = ?1
+               AND COALESCE(supplier_id, '') = COALESCE(?2, '')
+               AND is_active = 1
+               AND id != ?3",
+            rusqlite::params![sku, &product.supplier_id, &product.id],
+            |row| row.get(0),
+        ).optional().map_err(|e| e.to_string())?;
+        if let Some(name) = existing_name {
+            return Err(format!(
+                "Ya existe \"{}\" con el SKU '{}' para este proveedor.",
+                name, sku
+            ));
         }
     }
 

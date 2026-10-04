@@ -94,6 +94,9 @@
   let globalDiscountInput: number = $state(0);
   let showGlobalDiscount = $state(false);
 
+  // Simple pricing mode (hides discounts, tax rows and subtotal)
+  let simplePricing = $state(false);
+
   // Customer selection
   let selectedCustomer: Customer | null = $state(null);
   let customerSearch = $state('');
@@ -181,6 +184,9 @@
       // Load business info for receipts
       const allSettings = await getSettings();
       businessInfo = extractBusinessInfo(allSettings);
+      // Load simple pricing preference
+      const spSetting = allSettings.find(s => s.key === 'pos_simple_pricing');
+      simplePricing = spSetting?.value === 'true';
     } catch { /* first run, no data */ }
     await loadProducts('');
     // Auto-focus search input for barcode scanner
@@ -1173,10 +1179,19 @@
               "
             >
               <div class="flex items-center justify-between">
+                <div class="flex items-center gap-xs" style="min-width: 0; flex: 1; overflow: hidden;">
                 <span style="font-weight: 600; font-size: var(--font-size-sm);" class="truncate">
                   {item.product.product.name}
                 </span>
+                {#if item.product.supplier_name}
+                  <span class="badge badge-info" style="font-size: var(--font-size-xs); white-space: nowrap; flex-shrink: 0;">
+                    {item.product.supplier_name}
+                  </span>
+                {/if}
+              </div>
+
                 <div class="flex items-center gap-xs">
+                  {#if !simplePricing}
                   <button
                     class="btn btn-ghost btn-sm"
                     style="padding: 2px 6px; font-size: var(--font-size-xs); {item.discount > 0 ? 'color: var(--accent-warning);' : ''}"
@@ -1185,6 +1200,7 @@
                   >
                     {item.discount > 0 ? `−${formatCurrency(item.discount)}` : '% Desc.'}
                   </button>
+                  {/if}
                   <button
                     class="btn btn-ghost btn-sm"
                     style="width: 24px; height: 24px; padding: 0; font-size: var(--font-size-xs); border-radius: var(--radius-full);"
@@ -1195,7 +1211,7 @@
                 </div>
               </div>
 
-              {#if editingItemDiscount === index}
+              {#if editingItemDiscount === index && !simplePricing}
                 <div style="
                   background: var(--bg-elevated);
                   border-radius: var(--radius-sm);
@@ -1282,6 +1298,7 @@
     <!-- Cart totals & pay -->
     <div style="padding: var(--space-lg); border-top: 1px solid var(--border-color); background: var(--bg-tertiary);">
       <div style="display: flex; flex-direction: column; gap: var(--space-sm); margin-bottom: var(--space-lg);">
+        {#if !simplePricing}
         <div class="flex justify-between text-sm">
           <span class="text-muted">Subtotal</span>
           <span>{formatCurrency(cartSubtotal())}</span>
@@ -1355,6 +1372,7 @@
             </div>
           {/if}
         {/if}
+        {/if}
 
         <!-- Sale Notes -->
         {#if !showNotes}
@@ -1406,7 +1424,7 @@
         <div style="height: 1px; background: var(--border-color); margin: var(--space-xs) 0;"></div>
         <div class="flex justify-between" style="font-size: var(--font-size-xl); font-weight: 800;">
           <span>Total</span>
-          <span style="color: var(--accent-success);">{formatCurrency(cartTotal())}</span>
+          <span style="color: var(--accent-success);">{formatCurrency(simplePricing ? cartSubtotal() : cartTotal())}</span>
         </div>
       </div>
 

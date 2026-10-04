@@ -31,6 +31,7 @@
   let businessAddress = $state('');
   let businessPhone = $state('');
   let businessCity = $state('');
+  let simplePricing = $state(false);
 
   // Save feedback
   let saveSuccess = $state(false);
@@ -85,6 +86,7 @@
         if (s.key === 'business_city') businessCity = s.value;
         if (s.key === 'backup_path') backupPath = s.value;
         if (s.key === 'backup_frequency_hours') backupFrequency = s.value;
+        if (s.key === 'pos_simple_pricing') simplePricing = s.value === 'true';
       }
       users = await getUsers();
       // Load backup info
@@ -502,6 +504,22 @@
         <button class="btn btn-primary btn-block" onclick={saveBusiness}>
           {saveSuccess ? '✅ Guardado' : '💾 Guardar'}
         </button>
+
+        <!-- Modo precio simple -->
+        <div style="border-top: 1px solid var(--border-color); padding-top: var(--space-md);">
+          <label class="input-label">🧾 Modo precio simple en el carrito</label>
+          <p class="text-sm text-muted" style="margin-bottom: var(--space-sm);">
+            Oculta descuentos, débito fiscal y subtotales. Solo muestra el total como suma directa de precios.
+          </p>
+          <label style="display: flex; align-items: center; gap: var(--space-sm); cursor: pointer; user-select: none;">
+            <input
+              type="checkbox"
+              bind:checked={simplePricing}
+              onchange={() => updateSetting('pos_simple_pricing', simplePricing ? 'true' : 'false')}
+            />
+            <span style="font-size: var(--font-size-sm);">{simplePricing ? '✅ Activado' : 'Desactivado'}</span>
+          </label>
+        </div>
       </div>
     </div>
     {/if}

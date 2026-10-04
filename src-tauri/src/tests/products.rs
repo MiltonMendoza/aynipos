@@ -165,4 +165,70 @@ mod tests {
         assert_eq!(active_count, 1);
         assert_eq!(total_count, 2, "Ambos deben existir en DB (soft-delete)");
     }
+
+    // ── Tests de SKU duplicado por proveedor (migration v10) ───────────────
+
+    #[test]
+    fn test_duplicate_sku_different_supplier_allowed() {
+        let db = create_test_db();
+        let conn = db.conn.lock().unwrap();
+
+        // Crear un proveedor
+        let sup_id = uuid::Uuid::new_v4().to_string();
+        conn.execute(
+            "INSERT INTO suppliers (id, name, is_active) VALUES (?1, 'Proveedor B', 1)",
+            rusqlite::params![&sup_id],
+        ).expect("insert supplier");
+
+        // Producto SIN proveedor con SKU "MED-001"
+        let id1 = uuid::Uuid::new_v4().to_string();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, purchase_price, sale_price, tax_rate, unit)
+             VALUES (?1, 'MED-001', 'Medicamento A', 5.0, 10.0, 0.13, 'unidad')",
+            rusqlite::params![&id1],
+        ).expect("insert producto sin proveedor");
+
+        // Mismo SKU CON proveedor distinto → debe permitirse (no hay UNIQUE en sku desde v10)
+        let id2 = uuid::Uuid::new_v4().to_string();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, purchase_price, sale_price, tax_rate, unit, supplier_id)
+             VALUES (?1, 'MED-001', 'Medicamento A (Prov B)', 6.0, 11.0, 0.13, 'unidad', ?2)",
+            rusqlite::params![&id2, &sup_id],
+        ).expect("debe permitir mismo SKU con diferente proveedor");
+
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM products WHERE sku = 'MED-001'",
+            [],
+            |row| row.get(0),
+        ).expect("count");
+
+        assert_eq!(count, 2, "Dos productos con mismo SKU y diferente proveedor deben coexistir");
+    }
+
+    #[test]
+    fn test_duplicate_sku_same_supplier_blocked_by_app_validation() {
+        // Verifica que la query de validación del comando create_product
+        // detecta duplicados con mismo (sku, supplier) aunque la DB no lo enforce.
+        let db = create_test_db();
+        let conn = db.conn.lock().unwrap();
+
+        conn.execute(
+            "INSERT INTO products (id, sku, name, purchase_price, sale_price, tax_rate, unit)
+             VALUES ('id-1', 'MED-001', 'Medicamento A', 5.0, 10.0, 0.13, 'unidad')",
+            [],
+        ).expect("insert primero");
+
+        // Simular la validación del comando create_product (supplier_id = NULL en ambos)
+        let existing: Option<String> = conn.query_row(
+            "SELECT name FROM products
+             WHERE sku = ?1
+               AND COALESCE(supplier_id, '') = COALESCE(?2, '')
+               AND is_active = 1",
+            rusqlite::params!["MED-001", Option::<String>::None],
+            |row| row.get(0),
+        ).optional().expect("query");
+
+        assert!(existing.is_some(), "La validación debe detectar el duplicado con mismo proveedor");
+        assert_eq!(existing.unwrap(), "Medicamento A");
+    }
 }

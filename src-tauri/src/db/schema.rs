@@ -10,6 +10,7 @@ const MIGRATION_V6: &str = include_str!("../../migrations/006_timezone_bolivia.s
 const MIGRATION_V7: &str = include_str!("../../migrations/007_suppliers.sql");
 const MIGRATION_V8: &str = include_str!("../../migrations/008_product_dose.sql");
 const MIGRATION_V9: &str = include_str!("../../migrations/009_sales_user_id.sql");
+const MIGRATION_V11: &str = include_str!("../../migrations/011_sku_non_unique.sql");
 
 pub fn run_migrations(conn: &Connection) -> Result<()> {
     // Create migrations tracking table
@@ -84,7 +85,43 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.execute("INSERT INTO _migrations (version) VALUES (9)", [])?;
     }
 
-    log::info!("Database at version {}", std::cmp::max(current_version, 9));
+    if current_version < 11 {
+        log::info!("Applying migration v11: allow duplicate SKU per supplier");
+
+        // Pre-check: si ya hay SKUs duplicados con el mismo proveedor, abortar con mensaje claro.
+        let conflicts: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM (
+                    SELECT sku, COALESCE(supplier_id, '') AS sid
+                    FROM products WHERE is_active = 1
+                    GROUP BY sku, sid HAVING COUNT(*) > 1
+                )",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        if conflicts > 0 {
+            return Err(anyhow::anyhow!(
+                "Migración v11 cancelada: hay {} grupo(s) de productos activos con el mismo SKU \
+                 y el mismo proveedor. Resuelva los duplicados desde el inventario antes de actualizar.",
+                conflicts
+            ));
+        }
+
+        // Deshabilitar FK temporalmente: necesario para hacer DROP TABLE products
+        // (otras tablas tienen filas que lo referencian). Se re-activa siempre al final.
+        conn.execute_batch("PRAGMA foreign_keys = OFF;")?;
+        let migration_result = conn.execute_batch(MIGRATION_V11);
+        // Re-activar FK siempre, aunque la migración haya fallado
+        conn.execute_batch("PRAGMA foreign_keys = ON;").ok();
+        // Propagar error si la migración falló
+        migration_result?;
+
+        conn.execute("INSERT INTO _migrations (version) VALUES (11)", [])?;
+    }
+
+    log::info!("Database at version {}", std::cmp::max(current_version, 11));
     Ok(())
 }
 

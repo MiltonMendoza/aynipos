@@ -214,6 +214,8 @@
       const msg = String(e);
       if (msg.includes('código de barras')) {
         productErrors = { ...productErrors, barcode: msg };
+      } else if (msg.includes("SKU '")) {
+        productErrors = { ...productErrors, sku: msg };
       } else {
         alert('Error: ' + msg);
       }
@@ -369,6 +371,8 @@
       const msg = String(e);
       if (msg.includes('código de barras')) {
         editErrors = { ...editErrors, barcode: msg };
+      } else if (msg.includes("SKU '")) {
+        editErrors = { ...editErrors, sku: msg };
       } else {
         alert('Error: ' + msg);
       }
