@@ -2,6 +2,9 @@
 
 > Modifica la información de un producto existente: nombre, precios, categoría, código de barras y más.
 
+> [!NOTE]
+> **Nota de Configuración:** Los campos de **Dosis** y **Proveedor** son opcionales. Si tu rubro de negocio no los requiere, puedes desactivarlos en la pantalla de **Configuración ⚙️** para mantener este formulario limpio y simplificado.
+
 ---
 
 ## ¿Qué puedo hacer con esto?
@@ -47,6 +50,8 @@ Cambia los datos que necesites. Los campos disponibles son:
 | **Precio Venta (Bs)** | ✅ | Cuánto le cobras al cliente |
 | **Unidad** | ❌ | Tipo de unidad (ej: unidad, caja, blíster) |
 | **Stock mínimo** | ❌ | Cuántas unidades mínimas quieres tener. Si baja de este número, aparece la alerta "Bajo" |
+| **Dosis** | ❌ | Concentración o dosificación (ej: 500mg, 10ml). *Solo visible si está activo en Configuración.* |
+| **Proveedor** | ❌ | El distribuidor asociado al producto. *Solo visible si está activo en Configuración.* |
 | **Descripción** | ❌ | Texto libre para describir el producto |
 
 ### Paso 5: Guardar los cambios

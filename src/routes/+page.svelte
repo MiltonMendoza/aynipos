@@ -5,6 +5,7 @@
   import { canAccessRoute, getDefaultRoute, getRoleLabel, getRoleIcon } from '$lib/services/permissions';
   import { logAction, getLicenseStatus } from '$lib/services/api';
   import { applyUiTheme, getUserTheme, saveUserTheme, type AppTheme } from '$lib/services/theme';
+  import { featuresManager } from '$lib/services/features.svelte';
 
   let { children } = $props();
 
@@ -20,6 +21,7 @@
   onMount(() => {
     void bootstrapUiTheme();
     void checkLicense();
+    void featuresManager.load();
   });
 
   async function bootstrapUiTheme() {
@@ -55,9 +57,12 @@
     // { route: 'migration', icon: '🔄', label: 'Migración Datos', section: 'Herramientas' }, // Hidden - functionality preserved
   ];
 
-  // Filter nav items by role permissions
+  // Filter nav items by role permissions and active features
   let filteredNavItems = $derived(
-    navItems.filter(item => !currentUser || canAccessRoute(currentUser, item.route))
+    navItems.filter(item => {
+      if (item.route === 'suppliers' && !featuresManager.state.suppliers) return false;
+      return !currentUser || canAccessRoute(currentUser, item.route);
+    })
   );
 
   function navigate(route: AppRoute) {

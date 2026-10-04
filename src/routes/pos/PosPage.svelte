@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import type { ProductWithStock, CartItem, Customer, CreateCustomer, Sale, SaleItem, User } from '$lib/types';
   import { getProducts, getProductByBarcode, createSale, getSaleItems, cancelSale, getCurrentCashRegister, getDashboardStats, getCustomers, createCustomer, getSettings, logAction } from '$lib/services/api';
+  import { featuresManager } from '$lib/services/features.svelte';
   import { DataTableState } from '$lib/utils/datatable.svelte';
   import TablePagination from '$lib/components/TablePagination.svelte';
 
@@ -714,7 +715,7 @@
                 <!-- Fila 1: SKU + badge Proveedor resaltado -->
                 <div class="flex items-center justify-between" style="gap: var(--space-xs); flex-wrap: wrap;">
                   <span class="text-xs text-muted">{ps.product.sku}</span>
-                  {#if ps.supplier_name}
+                  {#if featuresManager.state.suppliers && ps.supplier_name}
                     <span style="
                       font-size: var(--font-size-sm); font-weight: 700;
                       padding: 3px 10px; border-radius: 999px;
@@ -730,7 +731,7 @@
                   {ps.product.name}
                 </div>
                 <!-- Dosis -->
-                {#if ps.product.dose}
+                {#if featuresManager.state.dose && ps.product.dose}
                   <div><span class="badge badge-info" style="font-size: var(--font-size-xs);">{ps.product.dose}</span></div>
                 {/if}
                 <!-- Categoría -->
@@ -738,7 +739,7 @@
                   <div class="text-xs text-muted truncate">{ps.category_name}</div>
                 {/if}
                 <!-- Vencimiento — chip con color según estado -->
-                {#if ps.nearest_expiry_date}
+                {#if featuresManager.state.expiry && ps.nearest_expiry_date}
                   {@const isExpired = ps.expiry_status === 'expired'}
                   {@const isExpiring = ps.expiry_status === 'expiring'}
                   <div style="
@@ -782,47 +783,57 @@
                     <th onclick={() => posTable.sortBy('product.name')} style="cursor: pointer; user-select: none;">
                       Producto {posTable.sortColumn === 'product.name' ? (posTable.sortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
-                    <th onclick={() => posTable.sortBy('product.dose')} style="cursor: pointer; user-select: none;">
-                      Dosis {posTable.sortColumn === 'product.dose' ? (posTable.sortDirection === 'asc' ? '↑' : '↓') : ''}
-                    </th>
+                    {#if featuresManager.state.dose}
+                      <th onclick={() => posTable.sortBy('product.dose')} style="cursor: pointer; user-select: none;">
+                        Dosis {posTable.sortColumn === 'product.dose' ? (posTable.sortDirection === 'asc' ? '↑' : '↓') : ''}
+                      </th>
+                    {/if}
                     <th onclick={() => posTable.sortBy('category_name')} style="cursor: pointer; user-select: none;">
                       Categoría {posTable.sortColumn === 'category_name' ? (posTable.sortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
-                    <th onclick={() => posTable.sortBy('supplier_name')} style="cursor: pointer; user-select: none;">
-                      Proveedor {posTable.sortColumn === 'supplier_name' ? (posTable.sortDirection === 'asc' ? '↑' : '↓') : ''}
-                    </th>
+                    {#if featuresManager.state.suppliers}
+                      <th onclick={() => posTable.sortBy('supplier_name')} style="cursor: pointer; user-select: none;">
+                        Proveedor {posTable.sortColumn === 'supplier_name' ? (posTable.sortDirection === 'asc' ? '↑' : '↓') : ''}
+                      </th>
+                    {/if}
                     <th onclick={() => posTable.sortBy('product.sale_price')} style="cursor: pointer; user-select: none;">
                       Precio {posTable.sortColumn === 'product.sale_price' ? (posTable.sortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th onclick={() => posTable.sortBy('current_stock')} style="cursor: pointer; user-select: none;">
                       Stock {posTable.sortColumn === 'current_stock' ? (posTable.sortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
-                    <th onclick={() => posTable.sortBy('nearest_expiry_date')} style="cursor: pointer; user-select: none;">
-                      Vencimiento {posTable.sortColumn === 'nearest_expiry_date' ? (posTable.sortDirection === 'asc' ? '↑' : '↓') : ''}
-                    </th>
+                    {#if featuresManager.state.expiry}
+                      <th onclick={() => posTable.sortBy('nearest_expiry_date')} style="cursor: pointer; user-select: none;">
+                        Vencimiento {posTable.sortColumn === 'nearest_expiry_date' ? (posTable.sortDirection === 'asc' ? '↑' : '↓') : ''}
+                      </th>
+                    {/if}
                   </tr>
                 </thead>
                 <tbody>
                   {#if posTable.paginated.length === 0}
-                    <tr><td colspan="9" class="text-center text-muted" style="padding: var(--space-3xl);">Sin productos</td></tr>
+                     <tr><td colspan={8 - (!featuresManager.state.dose ? 1 : 0) - (!featuresManager.state.suppliers ? 1 : 0) - (!featuresManager.state.expiry ? 1 : 0)} class="text-center text-muted" style="padding: var(--space-3xl);">Sin productos</td></tr>
                   {:else}
                     {#each posTable.paginated as ps}
                       <tr
-                        class:row-expired={ps.expiry_status === 'expired'}
+                        class:row-expired={featuresManager.state.expiry && ps.expiry_status === 'expired'}
                         class:row-low-stock={ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0}
-                        class:row-expiring={ps.expiry_status === 'expiring' && !(ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0)}
+                        class:row-expiring={featuresManager.state.expiry && ps.expiry_status === 'expiring' && !(ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0)}
                         style="cursor: {ps.current_stock <= 0 ? 'not-allowed' : 'pointer'}; opacity: {ps.current_stock <= 0 ? '0.5' : '1'};"
                         onclick={() => { if (ps.current_stock > 0) addToCart(ps); }}
                       >
                         <td class="font-mono text-sm">{ps.product.sku}</td>
                         <td style="font-weight: 600;">{ps.product.name}</td>
-                        <td class="text-muted">
-                          {#if ps.product.dose}
-                            <span class="badge badge-info" style="font-size: var(--font-size-xs);">{ps.product.dose}</span>
-                          {:else}—{/if}
-                        </td>
+                        {#if featuresManager.state.dose}
+                          <td class="text-muted">
+                            {#if ps.product.dose}
+                              <span class="badge badge-info" style="font-size: var(--font-size-xs);">{ps.product.dose}</span>
+                            {:else}—{/if}
+                          </td>
+                        {/if}
                         <td class="text-muted">{ps.category_name || '—'}</td>
-                        <td class="text-muted">{ps.supplier_name || '—'}</td>
+                        {#if featuresManager.state.suppliers}
+                          <td class="text-muted">{ps.supplier_name || '—'}</td>
+                        {/if}
                         <td style="font-weight: 600; color: var(--accent-primary);">{formatCurrency(ps.product.sale_price)}</td>
                         <td style="font-weight: 700;">
                           {ps.current_stock}
@@ -832,13 +843,15 @@
                             </span>
                           {/if}
                         </td>
-                        <td style="font-weight: 500;">
-                          {#if ps.nearest_expiry_date}
-                            {new Date(ps.nearest_expiry_date + 'T12:00:00').toLocaleDateString('es-BO', { day: '2-digit', month: 'short', year: 'numeric' })}
-                          {:else}
-                            —
-                          {/if}
-                        </td>
+                        {#if featuresManager.state.expiry}
+                          <td style="font-weight: 500;">
+                            {#if ps.nearest_expiry_date}
+                              {new Date(ps.nearest_expiry_date + 'T12:00:00').toLocaleDateString('es-BO', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            {:else}
+                              —
+                            {/if}
+                          </td>
+                        {/if}
                       </tr>
                     {/each}
                   {/if}

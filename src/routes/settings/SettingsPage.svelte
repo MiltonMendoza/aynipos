@@ -6,6 +6,7 @@
   import { printCashReport } from '$lib/services/cashReportPrint';
   import { getRoleLabel, getRoleIcon, hasPermission } from '$lib/services/permissions';
   import { open } from '@tauri-apps/plugin-dialog';
+  import { featuresManager } from '$lib/services/features.svelte';
 
   let { currentUser }: { currentUser: User | null } = $props();
 
@@ -34,6 +35,13 @@
 
   // Save feedback
   let saveSuccess = $state(false);
+
+  // Feature flags
+  let businessType = $state('pharmacy');
+  let featureExpiry = $state(true);
+  let featureDose = $state(true);
+  let featureLots = $state(true);
+  let featureSuppliers = $state(true);
 
   // Users management
   let users: User[] = $state([]);
@@ -85,6 +93,11 @@
         if (s.key === 'business_city') businessCity = s.value;
         if (s.key === 'backup_path') backupPath = s.value;
         if (s.key === 'backup_frequency_hours') backupFrequency = s.value;
+        if (s.key === 'business_type') businessType = s.value;
+        if (s.key === 'feature_expiry') featureExpiry = s.value !== '0';
+        if (s.key === 'feature_dose') featureDose = s.value !== '0';
+        if (s.key === 'feature_lots') featureLots = s.value !== '0';
+        if (s.key === 'feature_suppliers') featureSuppliers = s.value !== '0';
       }
       users = await getUsers();
       // Load backup info
@@ -107,8 +120,38 @@
     await updateSetting('business_address', businessAddress);
     await updateSetting('business_phone', businessPhone);
     await updateSetting('business_city', businessCity);
+    await updateSetting('business_type', businessType);
+    await updateSetting('feature_expiry', featureExpiry ? '1' : '0');
+    await updateSetting('feature_dose', featureDose ? '1' : '0');
+    await updateSetting('feature_lots', featureLots ? '1' : '0');
+    await updateSetting('feature_suppliers', featureSuppliers ? '1' : '0');
+    await featuresManager.load();
     saveSuccess = true;
     setTimeout(() => { saveSuccess = false; }, 3000);
+  }
+
+  function handleBusinessTypeChange() {
+    if (businessType === 'pharmacy') {
+      featureExpiry = true;
+      featureLots = true;
+      featureDose = true;
+      featureSuppliers = true;
+    } else if (businessType === 'minimarket') {
+      featureExpiry = true;
+      featureLots = false;
+      featureDose = false;
+      featureSuppliers = true;
+    } else if (businessType === 'retail') {
+      featureExpiry = false;
+      featureLots = false;
+      featureDose = false;
+      featureSuppliers = true;
+    } else if (businessType === 'general') {
+      featureExpiry = false;
+      featureLots = false;
+      featureDose = false;
+      featureSuppliers = false;
+    }
   }
 
   function validateOpenCash(): boolean {
@@ -488,44 +531,99 @@
     </div>
   </div>
 
-  <div style="display: grid; grid-template-columns: {hasPermission(currentUser, 'manage_settings') ? '1fr 1fr' : '1fr'}; gap: var(--space-xl); max-width: 900px;">
+  <div style="display: grid; grid-template-columns: {hasPermission(currentUser, 'manage_settings') ? 'repeat(3, 1fr)' : 'minmax(300px, 400px)'}; gap: var(--space-lg); max-width: 1300px; align-items: start;">
     <!-- Business info -->
     {#if hasPermission(currentUser, 'manage_settings')}
-    <div class="card">
-      <h3 style="font-weight: 700; margin-bottom: var(--space-lg);">🏪 Datos del Negocio</h3>
-      <div style="display: flex; flex-direction: column; gap: var(--space-lg);">
-        <div class="input-group"><label class="input-label">Razón Social</label><input class="input" bind:value={businessName} /></div>
-        <div class="input-group"><label class="input-label">NIT</label><input class="input" bind:value={businessNit} /></div>
-        <div class="input-group"><label class="input-label">Dirección</label><input class="input" bind:value={businessAddress} /></div>
-        <div class="input-group"><label class="input-label">Teléfono</label><input class="input" bind:value={businessPhone} /></div>
-        <div class="input-group"><label class="input-label">Ciudad</label><input class="input" bind:value={businessCity} /></div>
-        <button class="btn btn-primary btn-block" onclick={saveBusiness}>
-          {saveSuccess ? '✅ Guardado' : '💾 Guardar'}
-        </button>
+      <div class="card" style="padding: var(--space-lg) var(--space-xl);">
+        <h3 style="font-weight: 700; margin-bottom: var(--space-md); font-size: 1.15rem;">🏪 Datos del Negocio</h3>
+        <div style="display: flex; flex-direction: column; gap: var(--space-md);">
+          <div class="input-group" style="gap: 4px;"><label class="input-label" style="font-size: var(--font-size-xs);">Razón Social</label><input class="input input-compact" bind:value={businessName} /></div>
+          <div class="input-group" style="gap: 4px;"><label class="input-label" style="font-size: var(--font-size-xs);">NIT</label><input class="input input-compact" bind:value={businessNit} /></div>
+          <div class="input-group" style="gap: 4px;"><label class="input-label" style="font-size: var(--font-size-xs);">Dirección</label><input class="input input-compact" bind:value={businessAddress} /></div>
+          <div class="input-group" style="gap: 4px;"><label class="input-label" style="font-size: var(--font-size-xs);">Teléfono</label><input class="input input-compact" bind:value={businessPhone} /></div>
+          <div class="input-group" style="gap: 4px;"><label class="input-label" style="font-size: var(--font-size-xs);">Ciudad</label><input class="input input-compact" bind:value={businessCity} /></div>
+          <button class="btn btn-primary btn-block btn-sm" onclick={saveBusiness} style="margin-top: 4px;">
+            {saveSuccess ? '✅ Guardado' : '💾 Guardar'}
+          </button>
+        </div>
       </div>
-    </div>
+
+      <div class="card" style="padding: var(--space-lg) var(--space-xl);">
+        <h3 style="font-weight: 700; margin-bottom: var(--space-md); font-size: 1.15rem;">⚙️ Características</h3>
+        <div style="display: flex; flex-direction: column; gap: var(--space-md);">
+          <div class="input-group" style="gap: 4px;">
+            <label class="input-label" style="font-size: var(--font-size-xs);">Rubro / Preset Comercial</label>
+            <select class="select select-sm" bind:value={businessType} onchange={handleBusinessTypeChange}>
+              <option value="pharmacy">⚕️ Farmacia</option>
+              <option value="minimarket">🍎 Minimarket / Almacén</option>
+              <option value="retail">👕 Tienda de Ropa / Calzado</option>
+              <option value="general">📦 Genérico / Otro</option>
+            </select>
+          </div>
+          
+          <div style="display: flex; flex-direction: column; gap: 10px; margin-top: var(--space-xs);">
+            <label class="input-label" style="margin-bottom: 2px; font-size: var(--font-size-xs);">Activar características:</label>
+            
+            <label style="display: flex; align-items: start; gap: var(--space-sm); cursor: pointer; user-select: none;">
+              <input type="checkbox" bind:checked={featureExpiry} style="width: 16px; height: 16px; margin-top: 2px; accent-color: var(--accent-primary);" />
+              <div>
+                <div style="font-weight: 600; font-size: var(--font-size-sm); line-height: 1.2;">Vencimientos</div>
+                <div class="text-xs text-muted" style="margin-top: 1px; font-size: 0.75rem; line-height: 1.2;">Alertas de vencimiento en POS e inventario.</div>
+              </div>
+            </label>
+            
+            <label style="display: flex; align-items: start; gap: var(--space-sm); cursor: pointer; user-select: none;">
+              <input type="checkbox" bind:checked={featureLots} style="width: 16px; height: 16px; margin-top: 2px; accent-color: var(--accent-primary);" />
+              <div>
+                <div style="font-weight: 600; font-size: var(--font-size-sm); line-height: 1.2;">Control de Lotes</div>
+                <div class="text-xs text-muted" style="margin-top: 1px; font-size: 0.75rem; line-height: 1.2;">Ingresa y rastrea lotes al ajustar stock.</div>
+              </div>
+            </label>
+            
+            <label style="display: flex; align-items: start; gap: var(--space-sm); cursor: pointer; user-select: none;">
+              <input type="checkbox" bind:checked={featureDose} style="width: 16px; height: 16px; margin-top: 2px; accent-color: var(--accent-primary);" />
+              <div>
+                <div style="font-weight: 600; font-size: var(--font-size-sm); line-height: 1.2;">Campo Dosis</div>
+                <div class="text-xs text-muted" style="margin-top: 1px; font-size: 0.75rem; line-height: 1.2;">Habilita dosis (ej. 500mg) en productos.</div>
+              </div>
+            </label>
+
+            <label style="display: flex; align-items: start; gap: var(--space-sm); cursor: pointer; user-select: none;">
+              <input type="checkbox" bind:checked={featureSuppliers} style="width: 16px; height: 16px; margin-top: 2px; accent-color: var(--accent-primary);" />
+              <div>
+                <div style="font-weight: 600; font-size: var(--font-size-sm); line-height: 1.2;">Proveedores</div>
+                <div class="text-xs text-muted" style="margin-top: 1px; font-size: 0.75rem; line-height: 1.2;">Sección Proveedores en menú e inventario.</div>
+              </div>
+            </label>
+          </div>
+          
+          <button class="btn btn-primary btn-block btn-sm" onclick={saveBusiness} style="margin-top: 6px;">
+            {saveSuccess ? '✅ Guardado' : '💾 Guardar configuración'}
+          </button>
+        </div>
+      </div>
     {/if}
 
     <!-- Cash Register -->
-    <div class="card">
-      <h3 style="font-weight: 700; margin-bottom: var(--space-lg);">💰 Caja Registradora</h3>
+    <div class="card" style="padding: var(--space-lg) var(--space-xl);">
+      <h3 style="font-weight: 700; margin-bottom: var(--space-md); font-size: 1.15rem;">💰 Caja Registradora</h3>
       {#if cashRegister}
-        <div style="background: var(--accent-success-glow); border-radius: var(--radius-lg); padding: var(--space-xl); text-align: center; margin-bottom: var(--space-lg);">
-          <div class="badge badge-success" style="margin-bottom: var(--space-sm);">● Caja Abierta</div>
-          <div class="text-sm text-muted">Monto inicial: Bs {cashRegister.opening_amount.toFixed(2)}</div>
+        <div style="background: var(--accent-success-glow); border-radius: var(--radius-md); padding: var(--space-lg); text-align: center; margin-bottom: var(--space-md);">
+          <div class="badge badge-success" style="margin-bottom: var(--space-xs); font-size: var(--font-size-xs);">● Caja Abierta</div>
+          <div class="text-sm text-muted" style="font-size: var(--font-size-xs);">Monto inicial: Bs {cashRegister.opening_amount.toFixed(2)}</div>
           {#if cashRegister.user_name}
-            <div class="text-sm" style="margin-top: var(--space-xs); font-weight: 600;">👤 Cajero: {cashRegister.user_name}</div>
+            <div class="text-sm" style="margin-top: var(--space-xs); font-weight: 600; font-size: var(--font-size-sm);">👤 Cajero: {cashRegister.user_name}</div>
           {/if}
         </div>
-        <button class="btn btn-danger btn-block" onclick={closeCashModal}>🔒 Cerrar Caja</button>
+        <button class="btn btn-danger btn-block btn-sm" onclick={closeCashModal}>🔒 Cerrar Caja</button>
       {:else}
-        <div style="background: var(--bg-tertiary); border-radius: var(--radius-lg); padding: var(--space-xl); text-align: center; margin-bottom: var(--space-lg);">
-          <div class="badge badge-warning">● Caja Cerrada</div>
+        <div style="background: var(--bg-tertiary); border-radius: var(--radius-md); padding: var(--space-lg); text-align: center; margin-bottom: var(--space-md);">
+          <div class="badge badge-warning" style="font-size: var(--font-size-xs);">● Caja Cerrada</div>
         </div>
-        <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
-          <button class="btn btn-success btn-block" onclick={openCashModal}>🔓 Abrir Caja</button>
+        <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
+          <button class="btn btn-success btn-block btn-sm" onclick={openCashModal}>🔓 Abrir Caja</button>
           {#if lastClosedRegisterId}
-            <button class="btn btn-ghost btn-block" onclick={handleReprintReport}>📊 Ver último cierre</button>
+            <button class="btn btn-ghost btn-block btn-sm" onclick={handleReprintReport}>📊 Ver último cierre</button>
           {/if}
         </div>
       {/if}
@@ -534,7 +632,7 @@
 
   <!-- Users Management -->
   {#if hasPermission(currentUser, 'manage_users')}
-  <div style="max-width: 900px; margin-top: var(--space-xl);">
+  <div style="max-width: 1300px; margin-top: var(--space-xl);">
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
         <h3 style="font-weight: 700; margin: 0;">👥 Usuarios</h3>
@@ -591,7 +689,7 @@
 
   <!-- Backup Section -->
   {#if hasPermission(currentUser, 'manage_settings')}
-  <div style="max-width: 900px; margin-top: var(--space-xl);">
+  <div style="max-width: 1300px; margin-top: var(--space-xl);">
     <div class="card">
       <h3 style="font-weight: 700; margin-bottom: var(--space-lg);">💾 Backup Automático</h3>
 
@@ -680,7 +778,7 @@
 
   <!-- License Section -->
   {#if hasPermission(currentUser, 'manage_settings') && licenseStatus}
-  <div style="max-width: 900px; margin-top: var(--space-xl);">
+  <div style="max-width: 1300px; margin-top: var(--space-xl);">
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
         <h3 style="font-weight: 700; margin: 0;">🔑 Licencia</h3>
@@ -762,7 +860,7 @@
 
   <!-- Audit Log -->
   {#if hasPermission(currentUser, 'view_audit_log')}
-  <div style="max-width: 900px; margin-top: var(--space-xl);">
+  <div style="max-width: 1300px; margin-top: var(--space-xl);">
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
         <h3 style="font-weight: 700; margin: 0;">📋 Registro de Actividad</h3>

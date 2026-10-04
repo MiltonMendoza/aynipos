@@ -2,6 +2,9 @@
 
 > Registra el número de lote y la fecha de vencimiento cada vez que ingresa mercadería, y recibe alertas visuales tipo semáforo cuando un producto está por vencer.
 
+> [!NOTE]
+> **Nota de Configuración:** El control de **Lotes** y **Fechas de Vencimiento** es una característica opcional y configurable. Si tu rubro comercial no vende productos perecederos (como una tienda de ropa o bazar), puedes desactivar una o ambas funciones desde la pantalla de **Configuración ⚙️**. Al hacerlo, se ocultarán todas las columnas, botones de lotes, campos de ingreso y alertas de color de la interfaz.
+
 ---
 
 ## ¿Qué puedo hacer con esto?
@@ -12,8 +15,6 @@ Cuando compras mercadería, cada caja o paquete viene con un **número de lote**
 - **Ver todos los lotes** de un producto con un semáforo de colores
 - **Identificar rápidamente** qué productos están por vencer
 - **Eliminar** lotes vacíos que ya no necesitas
-
-> 💡 **¿No vendes productos que caducan?** No hay problema. Los campos de lote y vencimiento son opcionales. Puedes usar AyniPOS normalmente sin llenarlos.
 
 ---
 

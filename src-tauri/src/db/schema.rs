@@ -10,6 +10,7 @@ const MIGRATION_V6: &str = include_str!("../../migrations/006_timezone_bolivia.s
 const MIGRATION_V7: &str = include_str!("../../migrations/007_suppliers.sql");
 const MIGRATION_V8: &str = include_str!("../../migrations/008_product_dose.sql");
 const MIGRATION_V9: &str = include_str!("../../migrations/009_sales_user_id.sql");
+const MIGRATION_V10: &str = include_str!("../../migrations/010_business_type_settings.sql");
 
 pub fn run_migrations(conn: &Connection) -> Result<()> {
     // Create migrations tracking table
@@ -84,7 +85,13 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.execute("INSERT INTO _migrations (version) VALUES (9)", [])?;
     }
 
-    log::info!("Database at version {}", std::cmp::max(current_version, 9));
+    if current_version < 10 {
+        log::info!("Applying migration v10: seed business_type and features toggle keys");
+        conn.execute_batch(MIGRATION_V10)?;
+        conn.execute("INSERT INTO _migrations (version) VALUES (10)", [])?;
+    }
+
+    log::info!("Database at version {}", std::cmp::max(current_version, 10));
     Ok(())
 }
 

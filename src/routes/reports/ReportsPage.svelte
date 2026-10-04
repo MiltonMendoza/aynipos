@@ -6,6 +6,7 @@
   import { printCashReport } from '$lib/services/cashReportPrint';
   import { save } from '@tauri-apps/plugin-dialog';
   import { hasPermission } from '$lib/services/permissions';
+  import { featuresManager } from '$lib/services/features.svelte';
 
   let { currentUser }: { currentUser: User | null } = $props();
   import { openPath } from '@tauri-apps/plugin-opener';
@@ -761,11 +762,13 @@
     </div>
   </div>
 
-  <div class="card-grid" style="grid-template-columns: repeat({hasPermission(currentUser, 'view_reports_inventory') ? 5 : 4}, 1fr); margin-bottom: var(--space-2xl);">
+  <div class="card-grid" style="grid-template-columns: repeat({(hasPermission(currentUser, 'view_reports_inventory') ? 5 : 4) - (!featuresManager.state.expiry ? 1 : 0)}, 1fr); margin-bottom: var(--space-2xl);">
     <div class="stat-card"><div class="stat-icon green">💰</div><div class="stat-content"><div class="stat-value">{fmt(stats.total_sales_today)}</div><div class="stat-label">Ventas hoy</div></div></div>
     <div class="stat-card"><div class="stat-icon blue">🧾</div><div class="stat-content"><div class="stat-value">{stats.total_transactions_today}</div><div class="stat-label">Transacciones</div></div></div>
     <div class="stat-card"><div class="stat-icon yellow">⚠️</div><div class="stat-content"><div class="stat-value">{stats.low_stock_count}</div><div class="stat-label">Bajo stock</div></div></div>
-    <div class="stat-card"><div class="stat-icon red">⏰</div><div class="stat-content"><div class="stat-value">{stats.expiring_soon_count}</div><div class="stat-label">Por vencer</div></div></div>
+    {#if featuresManager.state.expiry}
+      <div class="stat-card"><div class="stat-icon red">⏰</div><div class="stat-content"><div class="stat-value">{stats.expiring_soon_count}</div><div class="stat-label">Por vencer</div></div></div>
+    {/if}
     {#if hasPermission(currentUser, 'view_reports_inventory')}
     <div class="stat-card" style="border-color: color-mix(in srgb, var(--accent-success) 35%, transparent);">
       <div class="stat-icon green">🏦</div>
@@ -1429,7 +1432,7 @@
   {/if}
 
   <!-- ─── Expiry Report ───────────────────────────── -->
-  {#if hasPermission(currentUser, 'view_reports_inventory')}
+  {#if hasPermission(currentUser, 'view_reports_inventory') && featuresManager.state.expiry}
   <div class="card" style="margin-bottom: var(--space-2xl);">
     <div class="top-header">
       <h3 style="font-weight: 700;">📅 Reporte de Vencimientos</h3>
@@ -1708,7 +1711,7 @@
   {/if}
 
   <!-- ─── Feature E: Reporte por Rango de Vencimiento ─────────────────── -->
-  {#if hasPermission(currentUser, 'view_reports_inventory')}
+  {#if hasPermission(currentUser, 'view_reports_inventory') && featuresManager.state.expiry}
   <div class="card" style="margin-bottom: var(--space-2xl);">
     <div class="top-header">
       <div>

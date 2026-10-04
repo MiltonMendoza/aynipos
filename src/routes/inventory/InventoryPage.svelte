@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { featuresManager } from '$lib/services/features.svelte';
   import type { ProductWithStock, Category, CreateProduct, UpdateProduct, ImportResult, InventoryLot, InventoryMovement, User, Supplier } from '$lib/types';
   import { getInventory, adjustInventory, getCategories, createProduct, createCategory, updateProduct, exportProductsCsv, importProductsCsv, getProductLots, deleteLot, getInventoryMovements, logAction, getSuppliers, deleteProduct } from '$lib/services/api';
   import { DataTableState } from '$lib/utils/datatable.svelte';
@@ -542,8 +543,8 @@
       {#each [
         { key: 'all' as const, label: 'Todos', icon: '📋' },
         { key: 'low' as const, label: 'Bajo Stock', icon: '⚠️' },
-        { key: 'expiring' as const, label: 'Por Vencer', icon: '⏰' },
-      ] as f}
+        { key: 'expiring' as const, label: 'Por Vencer', icon: '⏰', visible: featuresManager.state.expiry },
+      ].filter(f => f.visible !== false) as f}
         <button
           class="btn btn-sm"
           class:btn-primary={filter === f.key}
@@ -578,6 +579,7 @@
   <!-- Inventory table -->
   <div class="table-container">
     <!-- Leyenda de vencimiento -->
+    {#if featuresManager.state.expiry}
     <div class="expiry-legend" style="margin-bottom: var(--space-md);">
       <span style="font-weight: 600;">Vencimiento:</span>
       <div class="expiry-legend-item">
@@ -593,6 +595,7 @@
         <span>Vigente</span>
       </div>
     </div>
+    {/if}
     <table>
       <thead>
         <tr>
@@ -603,15 +606,19 @@
           <th onclick={() => table.sortBy('product.name')} style="cursor: pointer; user-select: none;">
             Producto {table.sortColumn === 'product.name' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
           </th>
-          <th onclick={() => table.sortBy('product.dose')} style="cursor: pointer; user-select: none;">
-            Dosis {table.sortColumn === 'product.dose' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
-          </th>
+          {#if featuresManager.state.dose}
+            <th onclick={() => table.sortBy('product.dose')} style="cursor: pointer; user-select: none;">
+              Dosis {table.sortColumn === 'product.dose' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+            </th>
+          {/if}
           <th onclick={() => table.sortBy('category_name')} style="cursor: pointer; user-select: none;">
             Categoría {table.sortColumn === 'category_name' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
           </th>
-          <th onclick={() => table.sortBy('supplier_name')} style="cursor: pointer; user-select: none;">
-            Proveedor {table.sortColumn === 'supplier_name' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
-          </th>
+          {#if featuresManager.state.suppliers}
+            <th onclick={() => table.sortBy('supplier_name')} style="cursor: pointer; user-select: none;">
+              Proveedor {table.sortColumn === 'supplier_name' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+            </th>
+          {/if}
           <th onclick={() => table.sortBy('product.purchase_price')} style="cursor: pointer; user-select: none;">
             P. Compra {table.sortColumn === 'product.purchase_price' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
           </th>
@@ -621,20 +628,22 @@
           <th onclick={() => table.sortBy('current_stock')} style="cursor: pointer; user-select: none;">
             Stock {table.sortColumn === 'current_stock' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
           </th>
-          <th onclick={() => table.sortBy('nearest_expiry_date')} style="cursor: pointer; user-select: none;">
-            Vencimiento {table.sortColumn === 'nearest_expiry_date' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
-          </th>
+          {#if featuresManager.state.expiry}
+            <th onclick={() => table.sortBy('nearest_expiry_date')} style="cursor: pointer; user-select: none;">
+              Vencimiento {table.sortColumn === 'nearest_expiry_date' ? (table.sortDirection === 'asc' ? '↑' : '↓') : ''}
+            </th>
+          {/if}
         </tr>
       </thead>
       <tbody>
         {#if table.paginated.length === 0}
-          <tr><td colspan="10" class="text-center text-muted" style="padding: var(--space-3xl);">Sin productos</td></tr>
+          <tr><td colspan={10 - (!featuresManager.state.dose ? 1 : 0) - (!featuresManager.state.suppliers ? 1 : 0) - (!featuresManager.state.expiry ? 1 : 0)} class="text-center text-muted" style="padding: var(--space-3xl);">Sin productos</td></tr>
         {:else}
           {#each table.paginated as ps}
             <tr
-              class:row-expired={ps.expiry_status === 'expired'}
+              class:row-expired={featuresManager.state.expiry && ps.expiry_status === 'expired'}
               class:row-low-stock={ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0}
-              class:row-expiring={ps.expiry_status === 'expiring' && !(ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0)}
+              class:row-expiring={featuresManager.state.expiry && ps.expiry_status === 'expiring' && !(ps.current_stock <= ps.product.min_stock && ps.product.min_stock > 0)}
             >
               <!-- Acciones: solo el trigger. El menú se renderiza como portal fijo al final del archivo -->
               <td>
@@ -648,13 +657,17 @@
               </td>
               <td class="font-mono text-sm">{ps.product.sku}</td>
               <td style="font-weight: 600;">{ps.product.name}</td>
-              <td class="text-muted">
-                {#if ps.product.dose}
-                  <span class="badge badge-info" style="font-size: var(--font-size-xs);">{ps.product.dose}</span>
-                {:else}—{/if}
-              </td>
+              {#if featuresManager.state.dose}
+                <td class="text-muted">
+                  {#if ps.product.dose}
+                    <span class="badge badge-info" style="font-size: var(--font-size-xs);">{ps.product.dose}</span>
+                  {:else}—{/if}
+                </td>
+              {/if}
               <td class="text-muted">{ps.category_name || '—'}</td>
-              <td class="text-muted">{ps.supplier_name || '—'}</td>
+              {#if featuresManager.state.suppliers}
+                <td class="text-muted">{ps.supplier_name || '—'}</td>
+              {/if}
               <td>{formatCurrency(ps.product.purchase_price)}</td>
               <td style="font-weight: 600; color: var(--accent-primary);">{formatCurrency(ps.product.sale_price)}</td>
               <!-- Stock horizontal: STOCK (Min: MIN) -->
@@ -667,13 +680,15 @@
                 {/if}
               </td>
               <!-- Vencimiento: solo fecha compacta -->
-              <td style="font-weight: 500;">
-                {#if ps.nearest_expiry_date}
-                  {new Date(ps.nearest_expiry_date + 'T12:00:00').toLocaleDateString('es-BO', { day: '2-digit', month: 'short', year: 'numeric' })}
-                {:else}
-                  —
-                {/if}
-              </td>
+              {#if featuresManager.state.expiry}
+                <td style="font-weight: 500;">
+                  {#if ps.nearest_expiry_date}
+                    {new Date(ps.nearest_expiry_date + 'T12:00:00').toLocaleDateString('es-BO', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  {:else}
+                    —
+                  {/if}
+                </td>
+              {/if}
             </tr>
           {/each}
         {/if}
@@ -777,22 +792,28 @@
             <input class="input" type="number" bind:value={newProduct.min_stock} min="0" />
           </div>
         </div>
-        <!-- Dosis (farmacéutico) -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg);">
-          <div class="input-group">
-            <label class="input-label">Dosis</label>
-            <input class="input" bind:value={newProduct.dose} placeholder="ej: 500mg, 10ml, 250mg/5ml" />
+        <!-- Dosis (farmacéutico) y Proveedor -->
+        {#if featuresManager.state.dose || featuresManager.state.suppliers}
+          <div style="display: grid; grid-template-columns: {featuresManager.state.dose && featuresManager.state.suppliers ? '1fr 1fr' : '1fr'}; gap: var(--space-lg);">
+            {#if featuresManager.state.dose}
+              <div class="input-group">
+                <label class="input-label">Dosis</label>
+                <input class="input" bind:value={newProduct.dose} placeholder="ej: 500mg, 10ml, 250mg/5ml" />
+              </div>
+            {/if}
+            {#if featuresManager.state.suppliers}
+              <div class="input-group">
+                <label class="input-label">Proveedor</label>
+                <select class="select" bind:value={newProduct.supplier_id}>
+                  <option value={undefined}>Sin proveedor</option>
+                  {#each suppliers as s}
+                    <option value={s.id}>{s.name}</option>
+                  {/each}
+                </select>
+              </div>
+            {/if}
           </div>
-          <div class="input-group">
-            <label class="input-label">Proveedor</label>
-            <select class="select" bind:value={newProduct.supplier_id}>
-              <option value={undefined}>Sin proveedor</option>
-              {#each suppliers as s}
-                <option value={s.id}>{s.name}</option>
-              {/each}
-            </select>
-          </div>
-        </div>
+        {/if}
         <!-- Descripción -->
         <div class="input-group">
           <label class="input-label">Descripción</label>
@@ -904,22 +925,28 @@
             <input class="input" type="number" bind:value={editProduct.min_stock} min="0" />
           </div>
         </div>
-        <!-- Dosis (farmacéutico) -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg);">
-          <div class="input-group">
-            <label class="input-label">Dosis</label>
-            <input class="input" bind:value={editProduct.dose} placeholder="ej: 500mg, 10ml, 250mg/5ml" />
+        <!-- Dosis (farmacéutico) y Proveedor -->
+        {#if featuresManager.state.dose || featuresManager.state.suppliers}
+          <div style="display: grid; grid-template-columns: {featuresManager.state.dose && featuresManager.state.suppliers ? '1fr 1fr' : '1fr'}; gap: var(--space-lg);">
+            {#if featuresManager.state.dose}
+              <div class="input-group">
+                <label class="input-label">Dosis</label>
+                <input class="input" bind:value={editProduct.dose} placeholder="ej: 500mg, 10ml, 250mg/5ml" />
+              </div>
+            {/if}
+            {#if featuresManager.state.suppliers}
+              <div class="input-group">
+                <label class="input-label">Proveedor</label>
+                <select class="select" bind:value={editProduct.supplier_id}>
+                  <option value={undefined}>Sin proveedor</option>
+                  {#each suppliers as s}
+                    <option value={s.id}>{s.name}</option>
+                  {/each}
+                </select>
+              </div>
+            {/if}
           </div>
-          <div class="input-group">
-            <label class="input-label">Proveedor</label>
-            <select class="select" bind:value={editProduct.supplier_id}>
-              <option value={undefined}>Sin proveedor</option>
-              {#each suppliers as s}
-                <option value={s.id}>{s.name}</option>
-              {/each}
-            </select>
-          </div>
-        </div>
+        {/if}
         <div class="input-group">
           <label class="input-label">Descripción</label>
           <textarea class="input" bind:value={editProduct.description} placeholder="Descripción del producto..." rows="2" style="resize: vertical;"></textarea>
@@ -968,7 +995,9 @@
       onclick={(e) => e.stopPropagation()}
     >
       <button class="action-item" onclick={() => { openDropdownId = null; const p = dropdownActiveProduct; dropdownActiveProduct = null; if(p) openEditProduct(p); }}>✏️ Editar</button>
-      <button class="action-item" onclick={() => { openDropdownId = null; const p = dropdownActiveProduct; dropdownActiveProduct = null; if(p) openLots(p); }}>📦 Lotes</button>
+      {#if featuresManager.state.expiry}
+        <button class="action-item" onclick={() => { openDropdownId = null; const p = dropdownActiveProduct; dropdownActiveProduct = null; if(p) openLots(p); }}>📦 Lotes</button>
+      {/if}
       <button class="action-item" onclick={() => { openDropdownId = null; const p = dropdownActiveProduct; dropdownActiveProduct = null; if(p) openAdjust(p); }}>📊 Ajustar stock</button>
       <button class="action-item" onclick={() => { openDropdownId = null; const p = dropdownActiveProduct; dropdownActiveProduct = null; if(p) openMovements(p); }}>📜 Historial</button>
       <div style="height: 1px; background: var(--border-primary); margin: 4px 0;"></div>
@@ -1061,16 +1090,22 @@
         {/if}
 
         <!-- Lote y vencimiento -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg);">
-          <div class="input-group">
-            <label class="input-label">Número de lote</label>
-            <input class="input" bind:value={adjustLotNumber} placeholder="LOTE-2026-A" />
+        {#if featuresManager.state.lots || featuresManager.state.expiry}
+          <div style="display: grid; grid-template-columns: {featuresManager.state.lots && featuresManager.state.expiry ? '1fr 1fr' : '1fr'}; gap: var(--space-lg);">
+            {#if featuresManager.state.lots}
+              <div class="input-group">
+                <label class="input-label">Número de lote</label>
+                <input class="input" bind:value={adjustLotNumber} placeholder="LOTE-2026-A" />
+              </div>
+            {/if}
+            {#if featuresManager.state.expiry}
+              <div class="input-group">
+                <label class="input-label">Fecha de vencimiento</label>
+                <input class="input" type="date" bind:value={adjustExpiryDate} />
+              </div>
+            {/if}
           </div>
-          <div class="input-group">
-            <label class="input-label">Fecha de vencimiento</label>
-            <input class="input" type="date" bind:value={adjustExpiryDate} />
-          </div>
-        </div>
+        {/if}
 
         <div class="input-group">
           <label class="input-label">Motivo del ajuste</label>
